@@ -215,23 +215,42 @@ const preferences = ['美食', '购物', '文化', '自然', '历史', '动漫',
 const currentPlan = computed(() => travelStore.currentPlan)
 const planHistory = computed(() => travelStore.planHistory)
 const mapMarkers = computed(() => {
-  if (!currentPlan.value || !currentPlan.value.itinerary || !Array.isArray(currentPlan.value.itinerary)) return []
+  if (!currentPlan.value || !currentPlan.value.itinerary || !Array.isArray(currentPlan.value.itinerary)) {
+    console.log('[Plan] mapMarkers: no itinerary in currentPlan', currentPlan.value?.title)
+    return []
+  }
   
-  return currentPlan.value.itinerary.flatMap((day, dayIndex) => {
+  const markers = currentPlan.value.itinerary.flatMap((day, dayIndex) => {
     if (!day || !day.activities || !Array.isArray(day.activities)) return []
     
-    return day.activities.map((activity, actIndex) => ({
-      position: activity.coordinates || [116.397428 + Math.random() * 0.1, 39.90923 + Math.random() * 0.1],
-      title: activity.name || '未知景点',
-      content: `<div class="marker-info">
-        <h4>${activity.name || '未知景点'}</h4>
-        <p>第${dayIndex + 1}天 ${activity.time || '时间待定'}</p>
-        <p>${activity.type || '活动'}</p>
-      </div>`,
-      dayIndex,
-      actIndex
-    }))
+    return day.activities.map((activity, actIndex) => {
+      // 验证坐标数据
+      let coordinates = [116.397428, 39.90923] // 默认坐标（北京）
+      
+      if (activity.coordinates && Array.isArray(activity.coordinates) && activity.coordinates.length >= 2) {
+        const [lng, lat] = activity.coordinates
+        // 检查坐标是否为有效数字
+        if (typeof lng === 'number' && typeof lat === 'number' && 
+            !isNaN(lng) && !isNaN(lat) && 
+            lng >= -180 && lng <= 180 && 
+            lat >= -90 && lat <= 90) {
+          coordinates = [lng, lat]
+        } else {
+          console.warn('[Plan] invalid activity.coordinates:', activity.coordinates)
+        }
+      } else if (activity.coordinates) {
+        console.warn('[Plan] malformed activity.coordinates:', activity.coordinates)
+      }
+      
+      return {
+        position: coordinates,
+        title: activity.name || '未知景点',
+        content: `<div class="marker-info">${dayIndex + 1}-${actIndex + 1}</div>`
+      }
+    })
   })
+  console.log('[Plan] mapMarkers count:', markers.length)
+  return markers
 })
 
 // 语音识别相关
@@ -365,11 +384,14 @@ const generatePlan = async () => {
     const planParams = parsePlanInput(inputText.value)
     
     // 创建临时计划用于显示流式内容
+    const tempTitle = planParams.destination ? `${planParams.destination}${planParams.days}日游` : '旅行计划生成中...'
     const tempPlan = {
       id: Date.now(),
-      title: `${planParams.destination}${planParams.days}日游`,
+      title: tempTitle,
       summary: '正在生成旅行计划...',
-      destination: planParams.destination,
+      destination: planParams.destination || '目的地识别中',
+      days: planParams.days,
+      budget: planParams.budget,
       totalCost: planParams.budget,
       itinerary: [],
       createdAt: new Date().toISOString(),
@@ -416,7 +438,23 @@ const generatePlan = async () => {
     
     // 更新地图中心
     if (plan.itinerary && plan.itinerary.length > 0 && plan.itinerary[0].activities.length > 0) {
-      mapCenter.value = plan.itinerary[0].activities[0].coordinates
+      const firstActivity = plan.itinerary[0].activities[0]
+      if (firstActivity.coordinates && Array.isArray(firstActivity.coordinates) && firstActivity.coordinates.length >= 2) {
+        const [lng, lat] = firstActivity.coordinates
+        // 验证坐标有效性
+        if (typeof lng === 'number' && typeof lat === 'number' && 
+            !isNaN(lng) && !isNaN(lat) && 
+            lng >= -180 && lng <= 180 && 
+            lat >= -90 && lat <= 90) {
+          mapCenter.value = [lng, lat]
+          console.log('[Plan] set center from first activity:', mapCenter.value)
+          if (mapRef.value) {
+            mapRef.value.setCenter(mapCenter.value)
+          }
+        } else {
+          console.warn('[Plan] first activity center invalid:', firstActivity.coordinates)
+        }
+      }
     }
     
     ElMessage.success('旅行计划生成成功！')
@@ -434,24 +472,47 @@ const generatePlan = async () => {
 
 // 解析输入内容
 const parsePlanInput = (input) => {
+  const trimmed = input.trim()
   return {
-    destination: extractDestination(input),
-    days: extractDays(input),
-    budget: extractBudget(input),
-    travelers: extractTravelers(input),
-    preferences: extractPreferences(input),
-    startDate: new Date().toISOString().split('T')[0]
+    destination: '', // 不在前端识别，交由 LLM 从原文提取
+    days: extractDays(trimmed),
+    budget: extractBudget(trimmed),
+    people: extractTravelers(trimmed), // 与 llm.js 的提示词对齐
+    travelers: extractTravelers(trimmed), // 保留兼容字段
+    preferences: extractPreferences(trimmed),
+    startDate: new Date().toISOString().split('T')[0],
+    rawInput: trimmed
   }
 }
 
 const extractDestination = (input) => {
-  const destinations = ['日本', '泰国', '韩国', '新加坡', '马来西亚', '越南', '中国', '美国', '法国', '意大利']
-  for (const dest of destinations) {
-    if (input.includes(dest)) {
-      return dest
+  const text = input.replace(/\s+/g, ' ').trim()
+
+  // 1) 基于语义关键词提取：只在“去/到/前往/目的地”等后面抓取
+  const keywordPatterns = [
+    /(?:目的地|去|到|前往|飞往|打算去|计划去|想到)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})(?=[,，。.!]|$)/,
+    /(?:去往|前去)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})/,
+    /([A-Za-z\u4e00-\u9fa5·\-]{1,30})\s*(?:之旅|之行|行程)(?=[,，。.!]|$)/
+  ]
+  for (const re of keywordPatterns) {
+    const m = text.match(re)
+    if (m && m[1]) {
+      const candidate = m[1].trim()
+      // 避免将“日本料理/美食/动漫”等偏好误识别为目的地
+      if (!/(料理|美食|动漫|文化|历史|温泉|海滩|购物|自然|亲子)$/.test(candidate)) {
+        return candidate
+      }
     }
   }
-  return '日本' // 默认目的地
+
+  // 2) 英文或拼音目的地：句末或逗号/句号前的独立词
+  const freePattern = /\b([A-Za-z][A-Za-z\s\-]{1,30})\b(?=[,，。.!]|$)/
+  const freeMatch = text.match(freePattern)
+  if (freeMatch && freeMatch[1]) {
+    return freeMatch[1].trim()
+  }
+
+  return '目的地未识别'
 }
 
 const extractDays = (input) => {
@@ -481,28 +542,30 @@ const extractPreferences = (input) => {
 
 // 备用计划生成
 const generateFallbackPlan = (params) => {
+  const lib = {
+    // ... existing code ...
+  }
+  const key = Object.keys(lib).includes(params.destination) ? params.destination : '中国'
+  const spots = lib[key].spots
+  const buildDay = (day, items) => ({
+    day,
+    activities: [
+      { time: '09:00', name: items[0].name, type: '景点', coordinates: items[0].coordinates },
+      { time: '12:00', name: items[1].name, type: '美食', coordinates: items[1].coordinates },
+      { time: '15:00', name: items[2].name, type: '景点', coordinates: items[2].coordinates }
+    ]
+  })
+  const displayDest = params.destination || key
   return {
-    title: `${params.destination}${params.days}日游`,
-    summary: '精心规划的旅行路线，包含热门景点和特色体验',
-    destination: params.destination,
+    title: `${displayDest}${params.days}日游`,
+    summary: '（备用方案）基于常见热门景点的简要行程',
+    destination: displayDest,
+    days: params.days,
+    budget: params.budget,
     totalCost: params.budget,
     itinerary: [
-      {
-        day: 1,
-        activities: [
-          { time: '09:00', name: '浅草寺', type: '景点', coordinates: [139.7967, 35.7148] },
-          { time: '12:00', name: '天妇罗大师', type: '美食', coordinates: [139.7978, 35.7158] },
-          { time: '15:00', name: '东京晴空塔', type: '景点', coordinates: [139.8107, 35.7101] }
-        ]
-      },
-      {
-        day: 2,
-        activities: [
-          { time: '10:00', name: '明治神宫', type: '景点', coordinates: [139.6993, 35.6762] },
-          { time: '14:00', name: '原宿竹下通', type: '购物', coordinates: [139.7025, 35.6702] },
-          { time: '18:00', name: '涩谷十字路口', type: '景点', coordinates: [139.7016, 35.6598] }
-        ]
-      }
+      buildDay(1, spots.slice(0, 3)),
+      buildDay(2, spots.slice(1, 4))
     ]
   }
 }
@@ -512,8 +575,36 @@ const loadPlan = (plan) => {
   travelStore.setPlan(plan)
   inputText.value = `${plan.destination}，${plan.days}，预算${plan.budget}`
   
-  if (plan.itinerary.length > 0 && plan.itinerary[0].activities.length > 0) {
-    mapCenter.value = plan.itinerary[0].activities[0].coordinates
+  // 设置地图中心，带校验与格式兼容
+  let center = [116.397428, 39.90923]
+  if (plan.itinerary && plan.itinerary.length > 0 && plan.itinerary[0].activities && plan.itinerary[0].activities.length > 0) {
+    const coord = plan.itinerary[0].activities[0].coordinates
+    if (coord) {
+      let lng, lat
+      if (Array.isArray(coord) && coord.length >= 2) {
+        lng = parseFloat(coord[0])
+        lat = parseFloat(coord[1])
+      } else if (typeof coord === 'object' && (coord.lng ?? coord.longitude) !== undefined && (coord.lat ?? coord.latitude) !== undefined) {
+        lng = parseFloat(coord.lng ?? coord.longitude)
+        lat = parseFloat(coord.lat ?? coord.latitude)
+      } else if (typeof coord === 'string') {
+        const parts = coord.split(',')
+        if (parts.length >= 2) {
+          lng = parseFloat(parts[0].trim())
+          lat = parseFloat(parts[1].trim())
+        }
+      }
+      if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+        center = [lng, lat]
+      } else {
+        console.warn('历史计划中心坐标无效，使用默认中心:', coord)
+      }
+    }
+  }
+  mapCenter.value = center
+  console.log('[Plan] loadPlan set center:', mapCenter.value)
+  if (mapRef.value) {
+    mapRef.value.setCenter(center)
   }
 }
 
@@ -527,6 +618,7 @@ const savePlan = () => {
 // 重置地图
 const resetMap = () => {
   mapCenter.value = [116.397428, 39.90923]
+  console.log('[Plan] resetMap center:', mapCenter.value)
   if (mapRef.value) {
     mapRef.value.setCenter(mapCenter.value)
     mapRef.value.setZoom(10)

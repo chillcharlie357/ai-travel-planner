@@ -40,7 +40,9 @@ export const generateTravelPlan = async (params, stream = false, onChunk = null)
       ],
       temperature: 0.7,
       max_tokens: 2000,
-      stream: stream
+      stream: stream,
+      response_format: { type: 'json_object' },
+      enable_thinking: false
     }
 
     if (stream && onChunk) {
@@ -56,16 +58,20 @@ export const generateTravelPlan = async (params, stream = false, onChunk = null)
         }
       }
       
-      return parseTravelPlanResponse(fullContent)
+      return parseTravelPlanResponse(fullContent, params)
     } else {
       // 非流式调用
       const response = await openai.chat.completions.create(requestData)
       const content = response.choices[0]?.message?.content || ''
-      return parseTravelPlanResponse(content)
+      return parseTravelPlanResponse(content, params)
     }
   } catch (error) {
     console.error('生成旅行计划失败:', error)
-    return createDefaultTravelPlan(error.message)
+    return createDefaultTravelPlan(error.message, { 
+      destination: params.destination, 
+      days: params.days, 
+      budget: params.budget 
+    })
   }
 }
 
@@ -88,7 +94,9 @@ export const analyzeTravelCost = async (travelPlan, stream = false, onChunk = nu
       ],
       temperature: 0.3,
       max_tokens: 1500,
-      stream: stream
+      stream: stream,
+      response_format: { type: 'json_object' },
+      enable_thinking: false
     }
 
     if (stream && onChunk) {
@@ -136,7 +144,9 @@ export const optimizeRoute = async (params, stream = false, onChunk = null) => {
       ],
       temperature: 0.5,
       max_tokens: 1500,
-      stream: stream
+      stream: stream,
+      response_format: { type: 'json_object' },
+      enable_thinking: false
     }
 
     if (stream && onChunk) {
@@ -165,31 +175,14 @@ export const optimizeRoute = async (params, stream = false, onChunk = null) => {
   }
 }
 
-// 创建旅行计划提示词
+// 创建旅行计划提示词（支持从原始输入自动识别目的地）
 function createTravelPlanPrompt(params) {
-  const { destination, days, budget, people, preferences, startDate } = params
-  
-  return `请为我制定一个简洁实用的旅行计划，要求如下：
+  const { destination, days, budget, people, preferences, startDate, rawInput } = params
+  const destLine = destination && destination.trim()
+    ? `目的地：${destination}`
+    : `目的地：请从“用户输入”自动识别`
 
-目的地：${destination}
-旅行天数：${days}天
-预算：${budget}元
-人数：${people}人
-偏好：${preferences}
-出发日期：${startDate}
-
-**重要要求：**
-1. 每天安排2-4个主要活动即可，不要过于密集
-2. 活动描述要简洁明了，每个描述控制在50字以内
-3. 优先推荐最具代表性和必游的景点
-4. 合理安排时间，留出休息和自由活动时间
-5. 总体内容要精炼，避免冗长的描述
-
-请按照以下JSON格式返回旅行计划（输出时去掉所有不必要的换行和空格，使用紧凑格式）：
-
-{"title":"旅行计划标题","summary":"旅行概述","totalBudget":${budget},"itinerary":[{"day":1,"date":"2025-10-17","theme":"主题","activities":[{"time":"09:00","name":"活动名称","type":"景点","location":"地点","description":"简洁描述(50字内)","coordinates":[116.397428,39.90923],"estimatedCost":100,"duration":"2小时"}],"meals":[{"type":"早餐","restaurant":"餐厅名称","cuisine":"菜系","estimatedCost":50}],"accommodation":{"name":"酒店名称","type":"酒店类型","location":"位置","estimatedCost":300},"transportation":{"method":"交通方式","estimatedCost":50},"dailyTotal":500}],"tips":["实用建议1(简洁明了)","实用建议2(简洁明了)"]}
-
-**重要：输出JSON时必须使用紧凑格式，不要包含任何换行符、制表符或多余空格。严格控制内容长度，确保整个计划简洁实用。**`
+  return `请为我制定一个简洁实用的旅行计划，要求如下：\n\n${destLine}\n用户输入：${rawInput || ''}\n旅行天数：${days}天\n预算：${budget}元\n人数：${people || 2}人\n偏好：${preferences}\n出发日期：${startDate}\n\n**重要要求：**\n1. 每天安排2-4个主要活动即可，不要过于密集\n2. 活动描述要简洁明了，每个描述控制在50字以内\n3. 优先推荐最具代表性和必游的景点\n4. 合理安排时间，留出休息和自由活动时间\n5. 总体内容要精炼，避免冗长的描述\n\n请按照以下JSON格式返回旅行计划（输出时去掉所有不必要的换行和空格，使用紧凑格式；并且必须包含destination字段）：\n\n{"title":"旅行计划标题","summary":"旅行概述","destination":"目的地名称","totalBudget":${budget},"itinerary":[{"day":1,"date":"2025-10-17","theme":"主题","activities":[{"time":"09:00","name":"活动名称","type":"景点","location":"地点","description":"简洁描述(50字内)","coordinates":[116.397428,39.90923],"estimatedCost":100,"duration":"2小时"}],"meals":[{"type":"早餐","restaurant":"餐厅名称","cuisine":"菜系","estimatedCost":50}],"accommodation":{"name":"酒店名称","type":"酒店类型","location":"位置","estimatedCost":300},"transportation":{"method":"交通方式","estimatedCost":50},"dailyTotal":500}],"tips":["实用建议1(简洁明了)","实用建议2(简洁明了)"]}\n\n**重要：输出JSON时必须使用紧凑格式，不要包含任何换行符、制表符或多余空格。严格控制内容长度，确保整个计划简洁实用。**`
 }
 
 // 创建费用分析提示词
@@ -269,17 +262,43 @@ function createRouteOptimizationPrompt(params) {
 }
 
 // 解析旅行计划响应
-function parseTravelPlanResponse(content) {
+function parseTravelPlanResponse(content, params = {}) {
   try {
-    // 尝试提取JSON部分
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0])
+    // 清理内容，移除可能的前后缀
+    let cleanContent = content.trim()
+    
+    // 尝试找到第一个 { 和最后一个 } 之间的内容
+    const firstBrace = cleanContent.indexOf('{')
+    const lastBrace = cleanContent.lastIndexOf('}')
+    
+    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+      const jsonString = cleanContent.substring(firstBrace, lastBrace + 1)
+      
+      // 进一步清理JSON字符串
+      const cleanedJson = jsonString
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 移除控制字符
+        .replace(/,\s*}/g, '}') // 移除尾随逗号
+        .replace(/,\s*]/g, ']') // 移除数组中的尾随逗号
+      
+      const parsed = JSON.parse(cleanedJson)
+      
+      // 确保包含必要字段
+      return {
+        ...parsed,
+        destination: parsed.destination || params.destination || '未知目的地',
+        days: parsed.days || params.days || 5,
+        budget: parsed.budget || parsed.totalBudget || params.budget || 10000,
+        totalBudget: parsed.totalBudget || parsed.budget || params.budget || 10000
+      }
     }
-    return createDefaultTravelPlan(content)
+    
+    // 如果找不到有效的JSON结构，返回默认计划
+    console.warn('无法找到有效的JSON结构，使用默认计划')
+    return createDefaultTravelPlan(content, params)
   } catch (error) {
     console.error('解析旅行计划响应失败:', error)
-    return createDefaultTravelPlan(content)
+    console.log('原始内容:', content)
+    return createDefaultTravelPlan(content, params)
   }
 }
 
@@ -312,11 +331,14 @@ function parseRouteOptimizationResponse(content) {
 }
 
 // 创建默认旅行计划
-function createDefaultTravelPlan(content) {
+function createDefaultTravelPlan(content, params = {}) {
   return {
-    title: '旅行计划生成中...',
+    title: params.destination ? `${params.destination}${params.days || 5}日游` : '旅行计划生成中...',
     summary: content || '正在为您生成个性化的旅行计划，请稍候...',
-    totalBudget: 0,
+    destination: params.destination || '未知目的地',
+    days: params.days || 5,
+    budget: params.budget || 10000,
+    totalBudget: params.budget || 10000,
     itinerary: [
       {
         day: 1,

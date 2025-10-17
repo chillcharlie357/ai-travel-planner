@@ -4,7 +4,7 @@ const config = {
   gaode: {
     key: import.meta.env.VITE_GAODE_MAP_KEY || 'demo_key_for_development',
     version: '2.0',
-    plugins: ['AMap.ToolBar', 'AMap.Scale', 'AMap.Marker', 'AMap.Geocoder']
+    plugins: ['AMap.ToolBar', 'AMap.Scale', 'AMap.Marker', 'AMap.Geocoder', 'AMap.Text']
   },
   
   // LLM API配置

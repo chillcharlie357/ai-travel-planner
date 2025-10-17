@@ -1,8 +1,7 @@
 <template>
   <div class="map-container">
     <div ref="mapContainer" class="map" :style="{ height: height }"></div>
-    <div v-if="loading" class="map-loading" v-loading="loading" element-loading-text="地图加载中...">
-    </div>
+    <!-- 移除 v-loading 灰色遮罩，避免高倍率下挡住地图 -->
   </div>
 </template>
 
@@ -36,6 +35,7 @@ const mapContainer = ref(null)
 const loading = ref(true)
 let map = null
 let markerInstances = []
+let textInstances = []
 
 // 初始化地图
 const initMap = async () => {
@@ -55,6 +55,7 @@ const initMap = async () => {
       viewMode: '3D',
       pitch: 0
     })
+    console.log('[Map] initMap center:', props.center, 'zoom:', props.zoom, 'markers:', Array.isArray(props.markers) ? props.markers.length : 0)
 
     // 添加工具栏
     const toolbar = new AMap.ToolBar({
@@ -94,47 +95,145 @@ const initMap = async () => {
 const updateMarkers = () => {
   if (!map) return
 
+  console.log('[Map] updateMarkers count:', Array.isArray(props.markers) ? props.markers.length : 0)
+
   // 清除现有标记
   markerInstances.forEach(marker => {
     map.remove(marker)
   })
   markerInstances = []
 
-  // 添加新标记
+  // 清除文本标签
+  if (textInstances.length) {
+    map.remove(textInstances)
+    textInstances = []
+  }
+
+  const validPositions = []
+
+  // 添加新标记（带坐标校验与规范化）
   props.markers.forEach((markerData, index) => {
-    const marker = new AMap.Marker({
-      position: markerData.position,
-      title: markerData.title || '',
-      content: markerData.content || `<div class="custom-marker">${index + 1}</div>`
-    })
+    let pos = markerData.position
+    let lng, lat
 
-    marker.on('click', () => {
-      emit('markerClick', markerData, index)
-    })
+    console.log('[Map] marker raw position:', pos)
 
-    map.add(marker)
-    markerInstances.push(marker)
+    if (Array.isArray(pos) && pos.length >= 2) {
+      lng = parseFloat(pos[0])
+      lat = parseFloat(pos[1])
+    } else if (pos && typeof pos === 'object') {
+      const rawLng = pos.lng ?? pos.longitude
+      const rawLat = pos.lat ?? pos.latitude
+      if (rawLng !== undefined && rawLat !== undefined) {
+        lng = parseFloat(rawLng)
+        lat = parseFloat(rawLat)
+      }
+    } else if (typeof pos === 'string') {
+      const parts = pos.split(',')
+      if (parts.length >= 2) {
+        lng = parseFloat(parts[0].trim())
+        lat = parseFloat(parts[1].trim())
+      }
+    }
+
+    console.log('[Map] marker parsed:', { lng, lat })
+
+    if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+      const normalized = [lng, lat]
+      const marker = new AMap.Marker({
+        position: normalized,
+        title: markerData.title || '',
+        content: markerData.content || `<div class="custom-marker">${index + 1}</div>`
+      })
+
+      marker.on('click', () => {
+        emit('markerClick', markerData, index)
+      })
+
+      map.add(marker)
+      markerInstances.push(marker)
+      validPositions.push(normalized)
+      console.log('[Map] marker added at:', normalized)
+
+      // 添加文本标签显示景点名称
+      const labelText = markerData.title || markerData.label || ''
+      if (labelText) {
+        const text = new AMap.Text({
+          text: labelText,
+          position: normalized,
+          anchor: 'bottom-center',
+          style: {
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            border: '1px solid #dcdcdc',
+            borderRadius: '4px',
+            padding: '2px 6px',
+            color: '#333',
+            fontSize: '12px',
+            lineHeight: '16px'
+          },
+          offset: new AMap.Pixel(0, -26)
+        })
+        map.add(text)
+        textInstances.push(text)
+      }
+    } else {
+      console.warn('[Map] invalid marker position:', markerData.position, { lng, lat })
+      console.warn('跳过无效标记点位置:', markerData.position)
+    }
   })
 
-  // 如果有标记点，调整地图视野
-  if (props.markers.length > 0) {
-    const bounds = new AMap.Bounds()
-    props.markers.forEach(marker => {
-      bounds.extend(marker.position)
-    })
-    map.setBounds(bounds, false, [20, 20, 20, 20])
+  // 如果有有效标记点，调整地图视野
+  if (validPositions.length > 0) {
+    try {
+      console.log('[Map] setFitView with markers:', markerInstances.length)
+      map.setFitView(markerInstances, false, [20, 20, 20, 20])
+    } catch (e) {
+      console.warn('[Map] setFitView failed, fallback to setBounds:', e)
+      const minLng = Math.min(...validPositions.map(p => p[0]))
+      const maxLng = Math.max(...validPositions.map(p => p[0]))
+      const minLat = Math.min(...validPositions.map(p => p[1]))
+      const maxLat = Math.max(...validPositions.map(p => p[1]))
+      console.log('[Map] computed bounds:', { minLng, minLat, maxLng, maxLat })
+      const sw = new AMap.LngLat(minLng, minLat)
+      const ne = new AMap.LngLat(maxLng, maxLat)
+      const bounds = new AMap.Bounds(sw, ne)
+      map.setBounds(bounds, false, [20, 20, 20, 20])
+    }
   }
 }
 
-// 监听标记点变化
-watch(() => props.markers, updateMarkers, { deep: true })
-
 // 监听中心点变化
 watch(() => props.center, (newCenter) => {
-  if (map) {
-    map.setCenter(newCenter)
+  if (!map) return
+  try {
+    let lng, lat
+    console.log('[Map] center watch raw:', newCenter)
+    if (Array.isArray(newCenter) && newCenter.length >= 2) {
+      lng = parseFloat(newCenter[0])
+      lat = parseFloat(newCenter[1])
+    } else if (newCenter && typeof newCenter === 'object' && (newCenter.lng ?? newCenter.longitude) !== undefined && (newCenter.lat ?? newCenter.latitude) !== undefined) {
+      lng = parseFloat(newCenter.lng ?? newCenter.longitude)
+      lat = parseFloat(newCenter.lat ?? newCenter.latitude)
+    } else if (typeof newCenter === 'string') {
+      const parts = newCenter.split(',')
+      if (parts.length >= 2) {
+        lng = parseFloat(parts[0].trim())
+        lat = parseFloat(parts[1].trim())
+      }
+    }
+    if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+      console.log('[Map] setCenter parsed:', [lng, lat])
+      map.setCenter([lng, lat])
+    } else {
+      console.warn('忽略无效中心点:', newCenter)
+    }
+  } catch (e) {
+    console.warn('设置中心点时出错:', e, newCenter)
   }
 })
+
+// 监听标记点变化
+watch(() => props.markers, updateMarkers, { deep: true })
 
 // 监听缩放级别变化
 watch(() => props.zoom, (newZoom) => {
@@ -182,17 +281,10 @@ defineExpose({
   width: 100%;
 }
 
+/* 删除遮罩：若仍保留 DOM，确保不拦截操作与显示 */
 .map-loading {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  display: none !important;
+  pointer-events: none;
 }
 </style>
 
