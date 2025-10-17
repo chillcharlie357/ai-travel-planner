@@ -116,17 +116,35 @@
             <template #header>
               <div class="card-header">
                 <span>智能费用分析</span>
+                <el-tag v-if="isStreaming" type="info" size="small">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  正在生成分析...
+                </el-tag>
                 <el-button 
                   type="primary" 
                   size="small" 
                   @click="analyzeExpenses"
                   :loading="isAnalyzing"
+                  :disabled="isStreaming"
                 >
                   <el-icon><PieChart /></el-icon>
                   {{ isAnalyzing ? '分析中...' : '开始分析' }}
                 </el-button>
               </div>
             </template>
+            
+            <!-- 流式内容显示 -->
+            <div v-if="isStreaming && streamingContent" class="streaming-content">
+              <el-alert
+                title="实时分析结果"
+                type="info"
+                :closable="false"
+                show-icon
+              >
+                <div class="streaming-text">{{ streamingContent }}</div>
+              </el-alert>
+            </div>
+            
             <div v-if="analysisResult" class="analysis-content">
               <el-row :gutter="20">
                 <el-col :span="12">
@@ -162,7 +180,7 @@
                 </el-col>
               </el-row>
             </div>
-            <div v-else class="no-analysis">
+            <div v-else-if="!isStreaming" class="no-analysis">
               <el-empty description="点击上方按钮开始智能分析您的旅行费用" />
             </div>
           </el-card>
@@ -261,12 +279,16 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { analyzeTravelCost } from '@/services/llm'
-import { Money, ShoppingCart, Wallet, PieChart, Edit, Plus } from '@element-plus/icons-vue'
+import { Money, ShoppingCart, Wallet, PieChart, Edit, Plus, Loading } from '@element-plus/icons-vue'
 
 // 响应式数据
 const totalBudget = ref(10000)
 const showAllocationDialog = ref(false)
 const showExpenseDialog = ref(false)
+
+// 流式响应状态
+const streamingContent = ref('')
+const isStreaming = ref(false)
 
 const budgetCategories = ref([
   { name: '交通', amount: 3000, color: '#409EFF' },
@@ -520,6 +542,8 @@ const analyzeExpenses = async () => {
   }
   
   isAnalyzing.value = true
+  isStreaming.value = true
+  streamingContent.value = ''
   
   try {
     const analysisData = {
@@ -529,15 +553,25 @@ const analyzeExpenses = async () => {
       categories: budgetCategories.value
     }
     
-    const result = await analyzeTravelCost(analysisData)
-    analysisResult.value = result
+    // 使用流式传输调用分析API
+    const result = await analyzeTravelCost(
+      analysisData,
+      true, // 启用流式传输
+      (chunk, fullContent) => {
+        // 流式回调函数
+        streamingContent.value = fullContent
+      }
+    )
     
+    analysisResult.value = result
     ElMessage.success('费用分析完成')
   } catch (error) {
     console.error('费用分析失败:', error)
     ElMessage.error('费用分析失败，请重试')
   } finally {
     isAnalyzing.value = false
+    isStreaming.value = false
+    streamingContent.value = ''
   }
 }
 
@@ -769,11 +803,24 @@ const getBudgetSuggestions = () => {
 }
 
 .no-analysis {
-  padding: 40px 0;
-  text-align: center;
-}
-
-@media (max-width: 768px) {
+   padding: 40px 0;
+   text-align: center;
+ }
+ 
+ .streaming-content {
+   margin-bottom: 20px;
+ }
+ 
+ .streaming-text {
+   white-space: pre-wrap;
+   line-height: 1.6;
+   font-size: 14px;
+   color: #606266;
+   max-height: 200px;
+   overflow-y: auto;
+ }
+ 
+ @media (max-width: 768px) {
   .budget-page {
     padding: 10px;
   }

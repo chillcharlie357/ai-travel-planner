@@ -1,8 +1,7 @@
 <template>
   <div class="map-container">
     <div ref="mapContainer" class="map" :style="{ height: height }"></div>
-    <div v-if="loading" class="map-loading">
-      <el-loading text="地图加载中..." />
+    <div v-if="loading" class="map-loading" v-loading="loading" element-loading-text="地图加载中...">
     </div>
   </div>
 </template>

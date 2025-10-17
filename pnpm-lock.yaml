@@ -20,6 +20,9 @@ dependencies:
   element-plus:
     specifier: ^2.11.4
     version: 2.11.4(vue@3.5.22)
+  openai:
+    specifier: ^6.4.0
+    version: 6.4.0
   pinia:
     specifier: ^3.0.3
     version: 3.0.3(vue@3.5.22)
@@ -1214,6 +1217,19 @@ packages:
 
   /normalize-wheel-es@1.2.0:
     resolution: {integrity: sha512-Wj7+EJQ8mSuXr2iWfnujrimU35R2W4FAErEyTmJoJ7ucwTn2hOUSsRehMb5RSYkxXGTM7Y9QpvPmp++w5ftoJw==}
+    dev: false
+
+  /openai@6.4.0:
+    resolution: {integrity: sha512-vSoVBRTPMgg3oSaoHIGfbYM2zwGN0D4F2aiNHMeu1lZHFOwfJMAF0X110HDdedYvcsIo578ujQ11WL5kP687Cw==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
     dev: false
 
   /pathe@2.0.3:

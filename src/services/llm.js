@@ -1,294 +1,318 @@
-import axios from 'axios'
+import OpenAI from 'openai'
 import { config } from '@/config'
 
-// 创建LLM API客户端
-const llmClient = axios.create({
+/**
+ * LLM API 服务
+ * 使用 OpenAI JavaScript SDK
+ * 支持流式传输和非流式调用
+ * 
+ * 功能特性：
+ * - 支持阿里云通义千问 API (DashScope)
+ * - 支持 OpenAI 兼容的 API
+ * - 流式传输实时响应
+ * - 错误处理和重试机制
+ */
+
+// 创建 OpenAI 客户端
+const openai = new OpenAI({
+  apiKey: config.llm.apiKey,
   baseURL: config.llm.apiUrl,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${config.llm.apiKey}`
-  }
+  dangerouslyAllowBrowser: true // 允许在浏览器中使用
 })
-
-// 请求拦截器
-llmClient.interceptors.request.use(
-  (config) => {
-    console.log('LLM API Request:', config.url)
-    return config
-  },
-  (error) => {
-    console.error('LLM API Request Error:', error)
-    return Promise.reject(error)
-  }
-)
-
-// 响应拦截器
-llmClient.interceptors.response.use(
-  (response) => {
-    console.log('LLM API Response:', response.status)
-    return response
-  },
-  (error) => {
-    console.error('LLM API Response Error:', error.response?.data || error.message)
-    return Promise.reject(error)
-  }
-)
 
 /**
  * 生成旅行计划
  * @param {Object} params - 旅行参数
- * @param {string} params.destination - 目的地
- * @param {number} params.days - 天数
- * @param {number} params.budget - 预算
- * @param {number} params.travelers - 旅行人数
- * @param {string} params.preferences - 旅行偏好
- * @param {string} params.startDate - 开始日期
+ * @param {boolean} stream - 是否使用流式传输
+ * @param {Function} onChunk - 流式传输回调函数
  * @returns {Promise<Object>} 旅行计划
  */
-export const generateTravelPlan = async (params) => {
+export const generateTravelPlan = async (params, stream = false, onChunk = null) => {
   try {
     const prompt = createTravelPlanPrompt(params)
     
-    const response = await llmClient.post('/chat/completions', {
+    const requestData = {
       model: config.llm.model,
       messages: [
-        {
-          role: 'system',
-          content: '你是一个专业的旅行规划师，能够根据用户需求生成详细的旅行计划。请以JSON格式返回结构化的旅行计划。'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: '你是一个专业的旅行规划师，能够根据用户需求制定详细的旅行计划。' },
+        { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 2000
-    })
+      max_tokens: 2000,
+      stream: stream
+    }
 
-    const content = response.data.choices[0].message.content
-    return parseTravelPlanResponse(content)
+    if (stream && onChunk) {
+      // 流式传输
+      const streamResponse = await openai.chat.completions.create(requestData)
+      let fullContent = ''
+      
+      for await (const chunk of streamResponse) {
+        const content = chunk.choices[0]?.delta?.content || ''
+        if (content) {
+          fullContent += content
+          onChunk(content, fullContent)
+        }
+      }
+      
+      return parseTravelPlanResponse(fullContent)
+    } else {
+      // 非流式调用
+      const response = await openai.chat.completions.create(requestData)
+      const content = response.choices[0]?.message?.content || ''
+      return parseTravelPlanResponse(content)
+    }
   } catch (error) {
     console.error('生成旅行计划失败:', error)
-    throw new Error('生成旅行计划失败，请稍后重试')
+    return createDefaultTravelPlan(error.message)
   }
 }
 
 /**
  * 分析旅行费用
  * @param {Object} travelPlan - 旅行计划
- * @returns {Promise<Object>} 费用分析结果
+ * @param {boolean} stream - 是否使用流式传输
+ * @param {Function} onChunk - 流式传输回调函数
+ * @returns {Promise<Object>} 费用分析
  */
-export const analyzeTravelCost = async (travelPlan) => {
+export const analyzeTravelCost = async (travelPlan, stream = false, onChunk = null) => {
   try {
     const prompt = createCostAnalysisPrompt(travelPlan)
     
-    const response = await llmClient.post('/chat/completions', {
+    const requestData = {
       model: config.llm.model,
       messages: [
-        {
-          role: 'system',
-          content: '你是一个旅行费用分析专家，能够详细分析旅行计划的各项费用。请以JSON格式返回结构化的费用分析。'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: '你是一个专业的旅行费用分析师，能够详细分析旅行计划的各项费用。' },
+        { role: 'user', content: prompt }
       ],
       temperature: 0.3,
-      max_tokens: 1500
-    })
+      max_tokens: 1500,
+      stream: stream
+    }
 
-    const content = response.data.choices[0].message.content
-    return parseCostAnalysisResponse(content)
+    if (stream && onChunk) {
+      // 流式传输
+      const streamResponse = await openai.chat.completions.create(requestData)
+      let fullContent = ''
+      
+      for await (const chunk of streamResponse) {
+        const content = chunk.choices[0]?.delta?.content || ''
+        if (content) {
+          fullContent += content
+          onChunk(content, fullContent)
+        }
+      }
+      
+      return parseCostAnalysisResponse(fullContent)
+    } else {
+      // 非流式调用
+      const response = await openai.chat.completions.create(requestData)
+      const content = response.choices[0]?.message?.content || ''
+      return parseCostAnalysisResponse(content)
+    }
   } catch (error) {
     console.error('分析旅行费用失败:', error)
-    throw new Error('分析旅行费用失败，请稍后重试')
+    return createDefaultCostAnalysis()
   }
 }
 
 /**
  * 优化旅行路线
- * @param {Object} params - 优化参数
- * @param {Array} params.destinations - 目的地列表
- * @param {string} params.startLocation - 起始位置
- * @param {string} params.transportation - 交通方式
+ * @param {Object} params - 路线参数
+ * @param {boolean} stream - 是否使用流式传输
+ * @param {Function} onChunk - 流式传输回调函数
  * @returns {Promise<Object>} 优化后的路线
  */
-export const optimizeRoute = async (params) => {
+export const optimizeRoute = async (params, stream = false, onChunk = null) => {
   try {
     const prompt = createRouteOptimizationPrompt(params)
     
-    const response = await llmClient.post('/chat/completions', {
+    const requestData = {
       model: config.llm.model,
       messages: [
-        {
-          role: 'system',
-          content: '你是一个路线优化专家，能够根据地理位置和交通方式优化旅行路线。请以JSON格式返回优化后的路线。'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: '你是一个专业的旅行路线优化师，能够根据地理位置和时间安排优化旅行路线。' },
+        { role: 'user', content: prompt }
       ],
-      temperature: 0.3,
-      max_tokens: 1000
-    })
+      temperature: 0.5,
+      max_tokens: 1500,
+      stream: stream
+    }
 
-    const content = response.data.choices[0].message.content
-    return parseRouteOptimizationResponse(content)
+    if (stream && onChunk) {
+      // 流式传输
+      const streamResponse = await openai.chat.completions.create(requestData)
+      let fullContent = ''
+      
+      for await (const chunk of streamResponse) {
+        const content = chunk.choices[0]?.delta?.content || ''
+        if (content) {
+          fullContent += content
+          onChunk(content, fullContent)
+        }
+      }
+      
+      return parseRouteOptimizationResponse(fullContent)
+    } else {
+      // 非流式调用
+      const response = await openai.chat.completions.create(requestData)
+      const content = response.choices[0]?.message?.content || ''
+      return parseRouteOptimizationResponse(content)
+    }
   } catch (error) {
     console.error('优化旅行路线失败:', error)
-    throw new Error('优化旅行路线失败，请稍后重试')
+    return createDefaultRouteOptimization()
   }
 }
 
-/**
- * 创建旅行计划提示词
- */
+// 创建旅行计划提示词
 function createTravelPlanPrompt(params) {
-  return `
-请为我生成一个详细的旅行计划，要求如下：
+  const { destination, days, budget, people, preferences, startDate } = params
+  
+  return `请为我制定一个详细的旅行计划，要求如下：
 
-目的地：${params.destination}
-旅行天数：${params.days}天
-预算：${params.budget}元
-旅行人数：${params.travelers}人
-旅行偏好：${params.preferences}
-出发日期：${params.startDate}
+目的地：${destination}
+旅行天数：${days}天
+预算：${budget}元
+人数：${people}人
+偏好：${preferences}
+出发日期：${startDate}
 
-请生成包含以下内容的JSON格式旅行计划：
+请按照以下JSON格式返回旅行计划：
+
 {
   "title": "旅行计划标题",
-  "summary": "行程概要",
-  "totalCost": 预计总费用,
-  "days": [
+  "summary": "旅行概述",
+  "totalBudget": ${budget},
+  "itinerary": [
     {
       "day": 1,
-      "date": "日期",
-      "theme": "当日主题",
+      "date": "2025-10-17",
+      "theme": "主题",
       "activities": [
         {
-          "time": "时间",
-          "activity": "活动名称",
+          "time": "09:00",
+          "name": "活动名称",
+          "type": "景点",
           "location": "地点",
           "description": "详细描述",
-          "cost": 费用,
-          "coordinates": [经度, 纬度]
+          "coordinates": [116.397428, 39.90923],
+          "estimatedCost": 100,
+          "duration": "2小时"
         }
-      ]
+      ],
+      "meals": [
+        {
+          "type": "早餐",
+          "restaurant": "餐厅名称",
+          "cuisine": "菜系",
+          "estimatedCost": 50
+        }
+      ],
+      "accommodation": {
+        "name": "酒店名称",
+        "type": "酒店类型",
+        "location": "位置",
+        "estimatedCost": 300
+      },
+      "transportation": {
+        "method": "交通方式",
+        "estimatedCost": 50
+      },
+      "dailyTotal": 500
     }
   ],
-  "accommodation": [
-    {
-      "name": "酒店名称",
-      "type": "酒店类型",
-      "location": "位置",
-      "pricePerNight": 每晚价格,
-      "coordinates": [经度, 纬度]
-    }
-  ],
-  "transportation": [
-    {
-      "type": "交通方式",
-      "route": "路线",
-      "cost": 费用,
-      "duration": "时长"
-    }
-  ],
-  "tips": ["旅行贴士1", "旅行贴士2"]
-}
-`
+  "tips": [
+    "实用建议1",
+    "实用建议2"
+  ]
+}`
 }
 
-/**
- * 创建费用分析提示词
- */
+// 创建费用分析提示词
 function createCostAnalysisPrompt(travelPlan) {
-  return `
-请分析以下旅行计划的详细费用：
+  return `请分析以下旅行计划的费用构成：
 
 ${JSON.stringify(travelPlan, null, 2)}
 
-请生成包含以下内容的JSON格式费用分析：
+请按照以下JSON格式返回费用分析：
+
 {
-  "totalBudget": 总预算,
+  "totalBudget": 10000,
   "categories": [
     {
-      "name": "费用类别",
-      "amount": 金额,
-      "percentage": 占比百分比,
-      "items": [
+      "name": "住宿",
+      "amount": 3000,
+      "percentage": 30,
+      "details": [
         {
-          "name": "具体项目",
-          "cost": 费用,
-          "description": "说明"
+          "item": "酒店费用",
+          "amount": 3000,
+          "nights": 6
         }
       ]
     }
   ],
-  "dailyCosts": [
-    {
-      "day": 天数,
-      "date": "日期",
-      "cost": 当日费用,
-      "breakdown": {
-        "accommodation": 住宿费用,
-        "food": 餐饮费用,
-        "transportation": 交通费用,
-        "activities": 活动费用,
-        "shopping": 购物费用
-      }
-    }
+  "dailyAverage": 1428,
+  "suggestions": [
+    "节省建议1",
+    "节省建议2"
   ],
-  "costSavingTips": ["省钱建议1", "省钱建议2"],
-  "budgetWarnings": ["预算警告1", "预算警告2"]
-}
-`
+  "alternatives": [
+    {
+      "category": "住宿",
+      "suggestion": "选择民宿",
+      "savings": 1000
+    }
+  ]
+}`
 }
 
-/**
- * 创建路线优化提示词
- */
+// 创建路线优化提示词
 function createRouteOptimizationPrompt(params) {
-  return `
-请优化以下旅行路线：
+  const { locations, startPoint, preferences } = params
+  
+  return `请优化以下旅行路线：
 
-起始位置：${params.startLocation}
-目的地列表：${params.destinations.join(', ')}
-交通方式：${params.transportation}
+起点：${startPoint}
+目的地列表：${locations.join(', ')}
+偏好：${preferences}
 
-请生成包含以下内容的JSON格式优化路线：
+请按照以下JSON格式返回优化后的路线：
+
 {
   "optimizedRoute": [
     {
-      "order": 顺序,
+      "order": 1,
       "location": "地点名称",
-      "coordinates": [经度, 纬度],
-      "stayDuration": "建议停留时间",
-      "travelTime": "到下一地点的时间",
-      "travelDistance": "到下一地点的距离"
+      "coordinates": {
+        "lat": 1.3521,
+        "lng": 103.8198
+      },
+      "estimatedTime": "2小时",
+      "transportation": "地铁",
+      "cost": 10,
+      "reason": "优化原因"
     }
   ],
-  "totalDistance": "总距离",
-  "totalTravelTime": "总旅行时间",
-  "optimizationReason": "优化原因说明"
-}
-`
+  "totalDistance": "25公里",
+  "totalTime": "8小时",
+  "totalCost": 100,
+  "tips": [
+    "路线建议1",
+    "路线建议2"
+  ]
+}`
 }
 
-/**
- * 解析旅行计划响应
- */
+// 解析旅行计划响应
 function parseTravelPlanResponse(content) {
   try {
-    // 尝试提取JSON内容
+    // 尝试提取JSON部分
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0])
     }
-    
-    // 如果没有找到JSON，返回默认结构
     return createDefaultTravelPlan(content)
   } catch (error) {
     console.error('解析旅行计划响应失败:', error)
@@ -296,16 +320,13 @@ function parseTravelPlanResponse(content) {
   }
 }
 
-/**
- * 解析费用分析响应
- */
+// 解析费用分析响应
 function parseCostAnalysisResponse(content) {
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0])
     }
-    
     return createDefaultCostAnalysis()
   } catch (error) {
     console.error('解析费用分析响应失败:', error)
@@ -313,16 +334,13 @@ function parseCostAnalysisResponse(content) {
   }
 }
 
-/**
- * 解析路线优化响应
- */
+// 解析路线优化响应
 function parseRouteOptimizationResponse(content) {
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0])
     }
-    
     return createDefaultRouteOptimization()
   } catch (error) {
     console.error('解析路线优化响应失败:', error)
@@ -330,92 +348,118 @@ function parseRouteOptimizationResponse(content) {
   }
 }
 
-/**
- * 创建默认旅行计划
- */
+// 创建默认旅行计划
 function createDefaultTravelPlan(content) {
   return {
-    title: '个性化旅行计划',
-    summary: content.substring(0, 200) + '...',
-    totalCost: 8000,
-    days: [
+    title: '旅行计划生成中...',
+    summary: content || '正在为您生成个性化的旅行计划，请稍候...',
+    totalBudget: 0,
+    itinerary: [
       {
         day: 1,
         date: new Date().toISOString().split('T')[0],
-        theme: '抵达与探索',
+        theme: '探索之旅',
         activities: [
           {
             time: '09:00',
-            activity: '抵达目的地',
-            location: '机场/车站',
-            description: '抵达目的地，前往酒店办理入住',
-            cost: 0,
-            coordinates: [116.4074, 39.9042]
+            name: '开始旅程',
+            type: '出发',
+            location: '出发地',
+            description: '准备开始精彩的旅程',
+            coordinates: [116.397428, 39.90923],
+            estimatedCost: 0,
+            duration: '1小时'
           }
-        ]
+        ],
+        meals: [
+          {
+            type: '早餐',
+            restaurant: '当地特色餐厅',
+            cuisine: '本地菜',
+            estimatedCost: 50
+          }
+        ],
+        accommodation: {
+          name: '舒适酒店',
+          type: '标准间',
+          location: '市中心',
+          estimatedCost: 300
+        },
+        transportation: {
+          method: '公共交通',
+          estimatedCost: 50
+        },
+        dailyTotal: 400
       }
     ],
-    accommodation: [
-      {
-        name: '推荐酒店',
-        type: '商务酒店',
-        location: '市中心',
-        pricePerNight: 300,
-        coordinates: [116.4074, 39.9042]
-      }
-    ],
-    transportation: [
-      {
-        type: '飞机',
-        route: '往返机票',
-        cost: 2000,
-        duration: '2小时'
-      }
-    ],
-    tips: ['提前预订可享受优惠', '注意当地天气变化']
+    tips: [
+      '请根据实际情况调整行程',
+      '注意查看天气预报',
+      '提前预订热门景点门票'
+    ]
   }
 }
 
-/**
- * 创建默认费用分析
- */
+// 创建默认费用分析
 function createDefaultCostAnalysis() {
   return {
-    totalBudget: 8000,
+    totalBudget: 0,
     categories: [
       {
-        name: '交通',
-        amount: 2400,
-        percentage: 30,
-        items: [
-          { name: '往返机票', cost: 2000, description: '经济舱' },
-          { name: '当地交通', cost: 400, description: '地铁、出租车等' }
-        ]
+        name: '住宿',
+        amount: 0,
+        percentage: 0,
+        details: []
       },
       {
-        name: '住宿',
-        amount: 2000,
-        percentage: 25,
-        items: [
-          { name: '酒店住宿', cost: 2000, description: '4晚商务酒店' }
-        ]
+        name: '餐饮',
+        amount: 0,
+        percentage: 0,
+        details: []
+      },
+      {
+        name: '交通',
+        amount: 0,
+        percentage: 0,
+        details: []
+      },
+      {
+        name: '景点门票',
+        amount: 0,
+        percentage: 0,
+        details: []
       }
     ],
-    dailyCosts: [],
-    costSavingTips: ['提前预订享受早鸟优惠', '选择当地特色餐厅性价比更高'],
-    budgetWarnings: []
+    dailyAverage: 0,
+    suggestions: [
+      '正在分析费用构成...',
+      '请稍候获取详细分析结果'
+    ],
+    alternatives: []
   }
 }
 
-/**
- * 创建默认路线优化
- */
+// 创建默认路线优化
 function createDefaultRouteOptimization() {
   return {
-    optimizedRoute: [],
-    totalDistance: '0公里',
-    totalTravelTime: '0小时',
-    optimizationReason: '路线优化中，请稍后重试'
+    optimizedRoute: [
+      {
+        order: 1,
+        location: '起点',
+        coordinates: { lat: 0, lng: 0 },
+        estimatedTime: '0分钟',
+        transportation: '步行',
+        cost: 0,
+        reason: '正在优化路线...'
+      }
+    ],
+    totalDistance: '计算中...',
+    totalTime: '计算中...',
+    totalCost: 0,
+    tips: [
+      '正在为您优化最佳路线',
+      '请稍候获取优化结果'
+    ]
   }
 }
 

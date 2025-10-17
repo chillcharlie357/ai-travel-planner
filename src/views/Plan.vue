@@ -136,18 +136,49 @@
             <template #header>
               <div class="card-header">
                 <span>{{ currentPlan.destination }}行程</span>
-                <el-button size="small" @click="savePlan">保存</el-button>
+                <div class="header-actions">
+                  <el-tag v-if="isStreaming" type="info" effect="plain">
+                    <el-icon class="is-loading"><Loading /></el-icon>
+                    正在生成...
+                  </el-tag>
+                  <el-button size="small" @click="savePlan" :disabled="isStreaming">保存</el-button>
+                </div>
               </div>
             </template>
             <div class="plan-content">
-              <div v-for="(day, index) in currentPlan.itinerary" :key="index" class="day-item">
-                <h4>第{{ index + 1}}天</h4>
-                <ul>
-                  <li v-for="(activity, actIndex) in day.activities" :key="actIndex">
-                    {{ activity.time }} - {{ activity.name }}
-                    <span class="activity-type">{{ activity.type }}</span>
-                  </li>
-                </ul>
+              <!-- 流式内容显示 -->
+              <div v-if="isStreaming && streamingContent" class="streaming-content">
+                <el-alert
+                  title="AI正在为您生成旅行计划"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                >
+                  <div class="streaming-text">
+                    {{ streamingContent }}
+                  </div>
+                </el-alert>
+              </div>
+              
+              <!-- 正常行程显示 -->
+              <div v-else-if="currentPlan.itinerary && currentPlan.itinerary.length > 0">
+                <div v-for="(day, index) in currentPlan.itinerary" :key="index" class="day-item">
+                  <h4>第{{ index + 1}}天</h4>
+                  <ul>
+                    <li v-for="(activity, actIndex) in day.activities" :key="actIndex">
+                      {{ activity.time }} - {{ activity.name }}
+                      <span class="activity-type">{{ activity.type }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              
+              <!-- 空状态或加载状态 -->
+              <div v-else class="empty-content">
+                <el-empty 
+                  :description="isPlanning ? '正在生成旅行计划，请稍候...' : '暂无行程安排'"
+                  :image-size="120"
+                />
               </div>
             </div>
           </el-card>
@@ -161,7 +192,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTravelStore } from '@/stores/travel'
 import MapComponent from '@/components/MapComponent.vue'
-import { Microphone, VideoPause, MagicStick, Refresh } from '@element-plus/icons-vue'
+import { Microphone, VideoPause, MagicStick, Refresh, Loading } from '@element-plus/icons-vue'
 import { generateTravelPlan } from '@/services/llm'
 import speechRecognition from '@/services/speech'
 
@@ -184,21 +215,23 @@ const preferences = ['美食', '购物', '文化', '自然', '历史', '动漫',
 const currentPlan = computed(() => travelStore.currentPlan)
 const planHistory = computed(() => travelStore.planHistory)
 const mapMarkers = computed(() => {
-  if (!currentPlan.value) return []
+  if (!currentPlan.value || !currentPlan.value.itinerary || !Array.isArray(currentPlan.value.itinerary)) return []
   
-  return currentPlan.value.itinerary.flatMap((day, dayIndex) =>
-    day.activities.map((activity, actIndex) => ({
+  return currentPlan.value.itinerary.flatMap((day, dayIndex) => {
+    if (!day || !day.activities || !Array.isArray(day.activities)) return []
+    
+    return day.activities.map((activity, actIndex) => ({
       position: activity.coordinates || [116.397428 + Math.random() * 0.1, 39.90923 + Math.random() * 0.1],
-      title: activity.name,
+      title: activity.name || '未知景点',
       content: `<div class="marker-info">
-        <h4>${activity.name}</h4>
-        <p>第${dayIndex + 1}天 ${activity.time}</p>
-        <p>${activity.type}</p>
+        <h4>${activity.name || '未知景点'}</h4>
+        <p>第${dayIndex + 1}天 ${activity.time || '时间待定'}</p>
+        <p>${activity.type || '活动'}</p>
       </div>`,
       dayIndex,
       actIndex
     }))
-  )
+  })
 })
 
 // 语音识别相关
@@ -311,6 +344,10 @@ const addToInput = (text) => {
   }
 }
 
+// 流式响应状态
+const streamingContent = ref('')
+const isStreaming = ref(false)
+
 // 生成旅行计划
 const generatePlan = async () => {
   if (!inputText.value.trim()) {
@@ -319,16 +356,48 @@ const generatePlan = async () => {
   }
   
   isPlanning.value = true
+  isStreaming.value = true
+  streamingContent.value = ''
   travelStore.setPlanning(true)
   
   try {
     // 解析输入内容
     const planParams = parsePlanInput(inputText.value)
     
-    // 尝试调用LLM API生成旅行计划
+    // 创建临时计划用于显示流式内容
+    const tempPlan = {
+      id: Date.now(),
+      title: `${planParams.destination}${planParams.days}日游`,
+      summary: '正在生成旅行计划...',
+      destination: planParams.destination,
+      totalCost: planParams.budget,
+      itinerary: [],
+      createdAt: new Date().toISOString(),
+      input: inputText.value,
+      isStreaming: true
+    }
+    
+    travelStore.setPlan(tempPlan)
+    
+    // 尝试调用LLM API生成旅行计划（使用流式传输）
     let generatedPlan
     try {
-      generatedPlan = await generateTravelPlan(planParams)
+      generatedPlan = await generateTravelPlan(
+        planParams, 
+        true, // 启用流式传输
+        (chunk, fullContent) => {
+          // 流式回调函数
+          streamingContent.value = fullContent
+          
+          // 更新临时计划的摘要
+          const updatedPlan = {
+            ...tempPlan,
+            summary: fullContent.length > 100 ? fullContent.substring(0, 100) + '...' : fullContent,
+            streamingContent: fullContent
+          }
+          travelStore.setPlan(updatedPlan)
+        }
+      )
     } catch (apiError) {
       console.warn('LLM API调用失败，使用备用方案:', apiError)
       generatedPlan = generateFallbackPlan(planParams)
@@ -337,9 +406,10 @@ const generatePlan = async () => {
     // 添加额外信息
     const plan = {
       ...generatedPlan,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      input: inputText.value
+      id: tempPlan.id,
+      createdAt: tempPlan.createdAt,
+      input: inputText.value,
+      isStreaming: false
     }
     
     travelStore.setPlan(plan)
@@ -356,6 +426,8 @@ const generatePlan = async () => {
     ElMessage.error('生成计划失败，请重试')
   } finally {
     isPlanning.value = false
+    isStreaming.value = false
+    streamingContent.value = ''
     travelStore.setPlanning(false)
   }
 }
@@ -722,6 +794,34 @@ onUnmounted(() => {
   border-radius: 4px;
   font-size: 12px;
   margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.streaming-content {
+  margin-bottom: 20px;
+}
+
+.streaming-text {
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.empty-content {
+  text-align: center;
+  padding: 40px 20px;
 }
 
 @media (max-width: 768px) {
