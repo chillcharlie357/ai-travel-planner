@@ -169,7 +169,7 @@ export const optimizeRoute = async (params, stream = false, onChunk = null) => {
 function createTravelPlanPrompt(params) {
   const { destination, days, budget, people, preferences, startDate } = params
   
-  return `请为我制定一个详细的旅行计划，要求如下：
+  return `请为我制定一个简洁实用的旅行计划，要求如下：
 
 目的地：${destination}
 旅行天数：${days}天
@@ -178,55 +178,18 @@ function createTravelPlanPrompt(params) {
 偏好：${preferences}
 出发日期：${startDate}
 
-请按照以下JSON格式返回旅行计划：
+**重要要求：**
+1. 每天安排2-4个主要活动即可，不要过于密集
+2. 活动描述要简洁明了，每个描述控制在50字以内
+3. 优先推荐最具代表性和必游的景点
+4. 合理安排时间，留出休息和自由活动时间
+5. 总体内容要精炼，避免冗长的描述
 
-{
-  "title": "旅行计划标题",
-  "summary": "旅行概述",
-  "totalBudget": ${budget},
-  "itinerary": [
-    {
-      "day": 1,
-      "date": "2025-10-17",
-      "theme": "主题",
-      "activities": [
-        {
-          "time": "09:00",
-          "name": "活动名称",
-          "type": "景点",
-          "location": "地点",
-          "description": "详细描述",
-          "coordinates": [116.397428, 39.90923],
-          "estimatedCost": 100,
-          "duration": "2小时"
-        }
-      ],
-      "meals": [
-        {
-          "type": "早餐",
-          "restaurant": "餐厅名称",
-          "cuisine": "菜系",
-          "estimatedCost": 50
-        }
-      ],
-      "accommodation": {
-        "name": "酒店名称",
-        "type": "酒店类型",
-        "location": "位置",
-        "estimatedCost": 300
-      },
-      "transportation": {
-        "method": "交通方式",
-        "estimatedCost": 50
-      },
-      "dailyTotal": 500
-    }
-  ],
-  "tips": [
-    "实用建议1",
-    "实用建议2"
-  ]
-}`
+请按照以下JSON格式返回旅行计划（输出时去掉所有不必要的换行和空格，使用紧凑格式）：
+
+{"title":"旅行计划标题","summary":"旅行概述","totalBudget":${budget},"itinerary":[{"day":1,"date":"2025-10-17","theme":"主题","activities":[{"time":"09:00","name":"活动名称","type":"景点","location":"地点","description":"简洁描述(50字内)","coordinates":[116.397428,39.90923],"estimatedCost":100,"duration":"2小时"}],"meals":[{"type":"早餐","restaurant":"餐厅名称","cuisine":"菜系","estimatedCost":50}],"accommodation":{"name":"酒店名称","type":"酒店类型","location":"位置","estimatedCost":300},"transportation":{"method":"交通方式","estimatedCost":50},"dailyTotal":500}],"tips":["实用建议1(简洁明了)","实用建议2(简洁明了)"]}
+
+**重要：输出JSON时必须使用紧凑格式，不要包含任何换行符、制表符或多余空格。严格控制内容长度，确保整个计划简洁实用。**`
 }
 
 // 创建费用分析提示词
