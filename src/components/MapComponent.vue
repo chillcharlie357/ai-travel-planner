@@ -52,8 +52,11 @@ const initMap = async () => {
       center: props.center,
       zoom: props.zoom,
       mapStyle: 'amap://styles/normal',
-      viewMode: '3D',
-      pitch: 0
+      viewMode: '2D',
+      pitch: 0,
+      features: ['bg', 'point', 'road', 'building'],
+      showLabel: true,
+      showBuildingBlock: false
     })
     console.log('[Map] initMap center:', props.center, 'zoom:', props.zoom, 'markers:', Array.isArray(props.markers) ? props.markers.length : 0)
 
@@ -143,7 +146,12 @@ const updateMarkers = () => {
       const marker = new AMap.Marker({
         position: normalized,
         title: markerData.title || '',
-        content: markerData.content || `<div class="custom-marker">${index + 1}</div>`
+        content: markerData.content || `<div class="custom-marker">${index + 1}</div>`,
+        anchor: 'center',
+        offset: new AMap.Pixel(0, 0),
+        zIndex: 1000,
+        clickable: true,
+        bubble: false
       })
 
       marker.on('click', () => {
@@ -261,6 +269,9 @@ defineExpose({
   setZoom: (zoom) => {
     if (map) map.setZoom(zoom)
   },
+  updateMarkers: () => {
+    updateMarkers()
+  },
   addMarker: (markerData) => {
     const newMarkers = [...props.markers, markerData]
     emit('update:markers', newMarkers)
@@ -279,34 +290,61 @@ defineExpose({
 
 .map {
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 /* 删除遮罩：若仍保留 DOM，确保不拦截操作与显示 */
 .map-loading {
   display: none !important;
-  pointer-events: none;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* 覆盖高德地图可能的默认样式 */
+.amap-container * {
+  box-sizing: border-box !important;
+}
+
+/* 确保marker容器不被遮挡 */
+.amap-marker {
+  z-index: 9999 !important;
+}
+
+.amap-marker-content {
+  z-index: 9999 !important;
 }
 </style>
 
 <style>
 /* 自定义标记点样式 */
 .custom-marker {
-  width: 30px;
-  height: 30px;
-  background: #409eff;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  width: 32px !important;
+  height: 32px !important;
+  background: #409eff !important;
+  color: white !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: bold !important;
+  font-size: 14px !important;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4) !important;
+  border: 3px solid white !important;
+  position: relative !important;
+  z-index: 9999 !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
 }
 
 .custom-marker:hover {
-  background: #66b1ff;
-  transform: scale(1.1);
-  transition: all 0.2s ease;
+  background: #66b1ff !important;
+  transform: scale(1.15) !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 6px 16px rgba(102, 177, 255, 0.5) !important;
 }
 </style>

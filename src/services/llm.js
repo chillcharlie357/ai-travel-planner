@@ -50,13 +50,18 @@ export const generateTravelPlan = async (params, stream = false, onChunk = null)
       const streamResponse = await openai.chat.completions.create(requestData)
       let fullContent = ''
       
+      console.log('🌊 [LLM] 开始流式响应处理')
+      
       for await (const chunk of streamResponse) {
         const content = chunk.choices[0]?.delta?.content || ''
         if (content) {
           fullContent += content
+          console.log('📝 [LLM] 流式数据块:', content)
           onChunk(content, fullContent)
         }
       }
+      
+      console.log('🏁 [LLM] 流式响应完成，完整内容长度:', fullContent.length)
       
       return parseTravelPlanResponse(fullContent, params)
     } else {
@@ -177,12 +182,38 @@ export const optimizeRoute = async (params, stream = false, onChunk = null) => {
 
 // 创建旅行计划提示词（支持从原始输入自动识别目的地）
 function createTravelPlanPrompt(params) {
-  const { destination, days, budget, people, preferences, startDate, rawInput } = params
-  const destLine = destination && destination.trim()
-    ? `目的地：${destination}`
-    : `目的地：请从“用户输入”自动识别`
+  const { rawInput } = params
 
-  return `请为我制定一个简洁实用的旅行计划，要求如下：\n\n${destLine}\n用户输入：${rawInput || ''}\n旅行天数：${days}天\n预算：${budget}元\n人数：${people || 2}人\n偏好：${preferences}\n出发日期：${startDate}\n\n**重要要求：**\n1. 每天安排2-4个主要活动即可，不要过于密集\n2. 活动描述要简洁明了，每个描述控制在50字以内\n3. 优先推荐最具代表性和必游的景点\n4. 合理安排时间，留出休息和自由活动时间\n5. 总体内容要精炼，避免冗长的描述\n\n请按照以下JSON格式返回旅行计划（输出时去掉所有不必要的换行和空格，使用紧凑格式；并且必须包含destination字段）：\n\n{"title":"旅行计划标题","summary":"旅行概述","destination":"目的地名称","totalBudget":${budget},"itinerary":[{"day":1,"date":"2025-10-17","theme":"主题","activities":[{"time":"09:00","name":"活动名称","type":"景点","location":"地点","description":"简洁描述(50字内)","coordinates":[116.397428,39.90923],"estimatedCost":100,"duration":"2小时"}],"meals":[{"type":"早餐","restaurant":"餐厅名称","cuisine":"菜系","estimatedCost":50}],"accommodation":{"name":"酒店名称","type":"酒店类型","location":"位置","estimatedCost":300},"transportation":{"method":"交通方式","estimatedCost":50},"dailyTotal":500}],"tips":["实用建议1(简洁明了)","实用建议2(简洁明了)"]}\n\n**重要：输出JSON时必须使用紧凑格式，不要包含任何换行符、制表符或多余空格。严格控制内容长度，确保整个计划简洁实用。**`
+  console.log('🎯 [LLM] 创建提示词参数:', params)
+
+  return `你是一个专业的旅行规划师，请根据用户的需求制定一个详细的旅行计划。
+
+用户需求：${rawInput}
+
+请仔细分析用户的需求，从中提取以下信息：
+- 目的地
+- 旅行天数
+- 预算
+- 人数
+- 偏好和兴趣
+- 其他特殊要求
+
+然后制定一个符合用户需求的旅行计划，要求：
+1. 严格按照用户提到的天数安排行程
+2. 每天安排2-4个主要活动
+3. 活动描述简洁明了（50字以内）
+4. 优先推荐最具代表性的景点
+5. 合理安排时间，留出休息时间
+6. 内容精炼实用
+
+请按照以下JSON格式返回（使用紧凑格式，不要换行）：
+
+{"title":"旅行计划标题","summary":"旅行概述","destination":"目的地名称","days":天数,"totalBudget":预算金额,"itinerary":[{"day":1,"date":"2025-01-20","theme":"主题","activities":[{"time":"09:00","name":"活动名称","type":"景点","location":"地点","description":"简洁描述","coordinates":[经度,纬度],"estimatedCost":100,"duration":"2小时"}],"meals":[{"type":"早餐","restaurant":"餐厅名称","cuisine":"菜系","estimatedCost":50}],"accommodation":{"name":"酒店名称","type":"酒店类型","location":"位置","estimatedCost":300},"transportation":{"method":"交通方式","estimatedCost":50},"dailyTotal":500}],"tips":["实用建议1","实用建议2"]}
+
+重要：
+- 必须严格按照用户需求中的天数生成对应数量的行程
+- 输出紧凑的JSON格式，不要包含换行符
+- 确保所有必需字段都包含在内`
 }
 
 // 创建费用分析提示词
@@ -264,6 +295,8 @@ function createRouteOptimizationPrompt(params) {
 // 解析旅行计划响应
 function parseTravelPlanResponse(content, params = {}) {
   try {
+    console.log('📥 [LLM] 原始响应内容:', content)
+    
     // 清理内容，移除可能的前后缀
     let cleanContent = content.trim()
     
@@ -271,8 +304,11 @@ function parseTravelPlanResponse(content, params = {}) {
     const firstBrace = cleanContent.indexOf('{')
     const lastBrace = cleanContent.lastIndexOf('}')
     
+    console.log('🔍 [LLM] JSON边界位置:', { firstBrace, lastBrace })
+    
     if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
       const jsonString = cleanContent.substring(firstBrace, lastBrace + 1)
+      console.log('📋 [LLM] 提取的JSON字符串:', jsonString)
       
       // 进一步清理JSON字符串
       const cleanedJson = jsonString
@@ -280,7 +316,9 @@ function parseTravelPlanResponse(content, params = {}) {
         .replace(/,\s*}/g, '}') // 移除尾随逗号
         .replace(/,\s*]/g, ']') // 移除数组中的尾随逗号
       
+      console.log('🔍 [LLM] 清理后的JSON字符串:', cleanedJson)
       const parsed = JSON.parse(cleanedJson)
+      console.log('✅ [LLM] 成功解析的JSON对象:', JSON.stringify(parsed, null, 2))
       
       // 确保包含必要字段
       return {

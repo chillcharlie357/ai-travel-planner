@@ -4,109 +4,188 @@
       <!-- 左侧输入面板 -->
       <div class="input-panel">
         <div class="panel-header">
-          <h2>AI旅行规划</h2>
+          <h2>AI 旅行规划师</h2>
           <p>告诉我您的旅行需求，我来为您规划完美行程</p>
         </div>
 
-        <div class="input-section">
-          <!-- 语音输入 -->
-          <div class="voice-input">
-            <el-button
-              :type="isRecording ? 'danger' : 'primary'"
-              :loading="isRecording"
-              size="large"
-              circle
-              @click="toggleRecording"
-              class="voice-btn"
-            >
-              <el-icon v-if="!isRecording"><Microphone /></el-icon>
-              <el-icon v-else><VideoPause /></el-icon>
-            </el-button>
-            <p class="voice-tip">
-              {{ isRecording ? '正在录音中，点击停止' : '点击开始语音输入' }}
-            </p>
-          </div>
-
-          <!-- 文字输入 -->
-          <div class="text-input">
-            <el-input
-              v-model="inputText"
-              type="textarea"
-              :rows="4"
-              placeholder="例如：我想去日本，5天，预算1万元，喜欢美食和动漫，带孩子"
-              class="input-textarea"
-            />
-          </div>
-
-          <!-- 快捷选项 -->
-          <div class="quick-options">
-            <h4>快捷选项</h4>
-            <div class="option-groups">
-              <div class="option-group">
-                <span class="group-label">目的地：</span>
-                <el-tag
-                  v-for="dest in destinations"
-                  :key="dest"
-                  @click="addToInput(dest)"
-                  class="option-tag"
+        <!-- Tab 切换 -->
+        <el-tabs v-model="activeTab" class="plan-tabs">
+          <!-- 生成计划 Tab -->
+          <el-tab-pane label="生成计划" name="generate">
+            <div class="generate-section">
+              <!-- 语音输入 -->
+              <div class="voice-input">
+                <el-button
+                  :type="isRecording ? 'danger' : 'primary'"
+                  :loading="isRecording"
+                  size="large"
+                  circle
+                  @click="toggleRecording"
+                  class="voice-btn"
                 >
-                  {{ dest }}
-                </el-tag>
+                  <el-icon v-if="!isRecording"><Microphone /></el-icon>
+                  <el-icon v-else><VideoPause /></el-icon>
+                </el-button>
+                <p class="voice-tip">
+                  {{
+                    isRecording ? "正在录音中，点击停止" : "点击开始语音输入"
+                  }}
+                </p>
               </div>
-              <div class="option-group">
-                <span class="group-label">天数：</span>
-                <el-tag
-                  v-for="day in days"
-                  :key="day"
-                  @click="addToInput(day)"
-                  class="option-tag"
-                >
-                  {{ day }}
-                </el-tag>
+
+              <!-- 文字输入 -->
+              <div class="text-input">
+                <el-input
+                  v-model="inputText"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="例如：我想去日本，5天，预算1万元，喜欢美食和动漫，带孩子"
+                  class="input-textarea"
+                />
+
+                <!-- 语音输入显示 -->
+                <div v-if="voiceText" class="voice-text">
+                  <el-alert
+                    :title="`语音识别: ${voiceText}`"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                  />
+                </div>
               </div>
-              <div class="option-group">
-                <span class="group-label">偏好：</span>
-                <el-tag
-                  v-for="pref in preferences"
-                  :key="pref"
-                  @click="addToInput(pref)"
-                  class="option-tag"
-                >
-                  {{ pref }}
-                </el-tag>
+
+              <!-- 快捷选项 -->
+              <div class="quick-options">
+                <h4>快捷选项</h4>
+                <div class="option-groups">
+                  <div class="option-group">
+                    <span class="group-label">目的地：</span>
+                    <el-tag
+                      v-for="dest in destinations"
+                      :key="dest"
+                      @click="addToInput(dest)"
+                      class="option-tag"
+                    >
+                      {{ dest }}
+                    </el-tag>
+                  </div>
+                  <div class="option-group">
+                    <span class="group-label">天数：</span>
+                    <el-tag
+                      v-for="day in days"
+                      :key="day"
+                      @click="addToInput(day)"
+                      class="option-tag"
+                    >
+                      {{ day }}
+                    </el-tag>
+                  </div>
+                  <div class="option-group">
+                    <span class="group-label">偏好：</span>
+                    <el-tag
+                      v-for="pref in preferences"
+                      :key="pref"
+                      @click="addToInput(pref)"
+                      class="option-tag"
+                    >
+                      {{ pref }}
+                    </el-tag>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 生成按钮 -->
+              <el-button
+                type="primary"
+                size="large"
+                :loading="isPlanning"
+                @click="generatePlan"
+                class="generate-btn"
+                :disabled="!inputText.trim()"
+              >
+                <el-icon><MagicStick /></el-icon>
+                {{ isPlanning ? "正在规划中..." : "生成旅行计划" }}
+              </el-button>
+
+              <!-- 本地临时历史记录 -->
+              <div v-if="planHistory.length > 0" class="temp-history-section">
+                <h4>本次会话生成的计划</h4>
+                <div class="history-list">
+                  <div
+                    v-for="(plan, index) in planHistory"
+                    :key="index"
+                    class="history-item"
+                    @click="loadPlan(plan)"
+                  >
+                    <div class="history-title">{{ plan.destination }}</div>
+                    <div class="history-info">
+                      {{ plan.days }}天 · {{ plan.budget }}
+                    </div>
+                    <el-tag size="small" type="warning">临时</el-tag>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </el-tab-pane>
 
-          <!-- 生成按钮 -->
-          <el-button
-            type="primary"
-            size="large"
-            :loading="isPlanning"
-            @click="generatePlan"
-            class="generate-btn"
-            :disabled="!inputText.trim()"
-          >
-            <el-icon><MagicStick /></el-icon>
-            {{ isPlanning ? '正在规划中...' : '生成旅行计划' }}
-          </el-button>
-        </div>
+          <!-- 计划历史 Tab -->
+          <el-tab-pane label="计划历史" name="history">
+            <div class="history-section">
+              <div class="history-header">
+                <h4>已保存的旅行计划</h4>
+                <el-button
+                  size="small"
+                  @click="loadSavedHistory"
+                  :loading="isLoading"
+                >
+                  <el-icon><Refresh /></el-icon>
+                  刷新
+                </el-button>
+              </div>
 
-        <!-- 历史记录 -->
-        <div v-if="planHistory.length > 0" class="history-section">
-          <h4>历史规划</h4>
-          <div class="history-list">
-            <div
-              v-for="(plan, index) in planHistory"
-              :key="index"
-              class="history-item"
-              @click="loadPlan(plan)"
-            >
-              <div class="history-title">{{ plan.destination }}</div>
-              <div class="history-info">{{ plan.days }}天 · {{ plan.budget }}</div>
+              <div v-if="isLoading" class="loading-state">
+                <el-skeleton :rows="3" animated />
+              </div>
+
+              <div v-else-if="savedHistory.length === 0" class="empty-history">
+                <el-empty description="暂无保存的旅行计划" />
+              </div>
+
+              <div v-else class="saved-history-list">
+                <div
+                  v-for="plan in savedHistory"
+                  :key="plan.id"
+                  class="saved-history-item"
+                  @click="loadPlanFromHistory(plan)"
+                >
+                  <div class="history-content">
+                    <div class="history-title">{{ plan.title }}</div>
+                    <div class="history-destination">
+                      {{ plan.destination }}
+                    </div>
+                    <div class="history-info">
+                      {{ plan.days }}天 · ¥{{ plan.budget?.toLocaleString() }} ·
+                      {{ plan.people }}人
+                    </div>
+                    <div class="history-date">
+                      {{ formatDate(plan.created_at) }}
+                    </div>
+                  </div>
+                  <div class="history-actions" @click.stop>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="deleteFromHistory(plan.id)"
+                      :loading="isLoading"
+                    >
+                      删除
+                    </el-button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
 
       <!-- 右侧地图面板 -->
@@ -120,7 +199,7 @@
             </el-button>
           </div>
         </div>
-        
+
         <MapComponent
           ref="mapRef"
           height="calc(100vh - 140px)"
@@ -141,13 +220,36 @@
                     <el-icon class="is-loading"><Loading /></el-icon>
                     正在生成...
                   </el-tag>
-                  <el-button size="small" @click="savePlan" :disabled="isStreaming">保存</el-button>
+                  <el-button
+                    size="small"
+                    type="success"
+                    @click="savePlanToHistory"
+                    :disabled="isStreaming || isLoading"
+                    :loading="isLoading"
+                    v-if="currentPlan && !currentPlan.savedToHistory"
+                  >
+                    <el-icon><DocumentAdd /></el-icon>
+                    保存到历史
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    @click="deletePlan"
+                    :disabled="isStreaming || isLoading"
+                    v-if="currentPlan"
+                  >
+                    <el-icon><Delete /></el-icon>
+                    删除计划
+                  </el-button>
                 </div>
               </div>
             </template>
             <div class="plan-content">
               <!-- 流式内容显示 -->
-              <div v-if="isStreaming && streamingContent" class="streaming-content">
+              <div
+                v-if="isStreaming && streamingContent"
+                class="streaming-content"
+              >
                 <el-alert
                   title="AI正在为您生成旅行计划"
                   type="info"
@@ -159,24 +261,37 @@
                   </div>
                 </el-alert>
               </div>
-              
+
               <!-- 正常行程显示 -->
-              <div v-else-if="currentPlan.itinerary && currentPlan.itinerary.length > 0">
-                <div v-for="(day, index) in currentPlan.itinerary" :key="index" class="day-item">
-                  <h4>第{{ index + 1}}天</h4>
+              <div
+                v-else-if="
+                  currentPlan.itinerary && currentPlan.itinerary.length > 0
+                "
+              >
+                <div
+                  v-for="(day, index) in currentPlan.itinerary"
+                  :key="index"
+                  class="day-item"
+                >
+                  <h4>第{{ index + 1 }}天</h4>
                   <ul>
-                    <li v-for="(activity, actIndex) in day.activities" :key="actIndex">
+                    <li
+                      v-for="(activity, actIndex) in day.activities"
+                      :key="actIndex"
+                    >
                       {{ activity.time }} - {{ activity.name }}
                       <span class="activity-type">{{ activity.type }}</span>
                     </li>
                   </ul>
                 </div>
               </div>
-              
+
               <!-- 空状态或加载状态 -->
               <div v-else class="empty-content">
-                <el-empty 
-                  :description="isPlanning ? '正在生成旅行计划，请稍候...' : '暂无行程安排'"
+                <el-empty
+                  :description="
+                    isPlanning ? '正在生成旅行计划，请稍候...' : '暂无行程安排'
+                  "
                   :image-size="120"
                 />
               </div>
@@ -189,470 +304,726 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useTravelStore } from '@/stores/travel'
-import MapComponent from '@/components/MapComponent.vue'
-import { Microphone, VideoPause, MagicStick, Refresh, Loading } from '@element-plus/icons-vue'
-import { generateTravelPlan } from '@/services/llm'
-import speechRecognition from '@/services/speech'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { useTravelStore } from "@/stores/travel";
+import { useUserStore } from '@/stores/user'
+import MapComponent from "@/components/MapComponent.vue";
+import {
+  Microphone,
+  VideoPause,
+  MagicStick,
+  Refresh,
+  Loading,
+  DocumentAdd,
+  Delete,
+} from "@element-plus/icons-vue";
+import { generateTravelPlan } from "@/services/llm";
+import speechRecognition from "@/services/speech";
 
-const travelStore = useTravelStore()
+// 状态管理
+const travelStore = useTravelStore();
+const authStore = useUserStore();
 
 // 响应式数据
-const inputText = ref('')
-const isRecording = ref(false)
-const isPlanning = ref(false)
-const mapRef = ref(null)
-const mapCenter = ref([116.397428, 39.90923])
-const voiceText = ref('')
+const activeTab = ref("generate");
+const inputText = ref("");
+const voiceText = ref("");
+const isRecording = ref(false);
+const isPlanning = ref(false);
+const mapRef = ref(null);
+const mapCenter = ref([116.397428, 39.90923]);
 
 // 快捷选项数据
-const destinations = ['日本', '韩国', '泰国', '新加坡', '马来西亚', '台湾']
-const days = ['3天', '5天', '7天', '10天', '15天']
-const preferences = ['美食', '购物', '文化', '自然', '历史', '动漫', '亲子']
+const destinations = [
+  "日本",
+  "韩国",
+  "泰国",
+  "新加坡",
+  "马来西亚",
+  "越南",
+  "法国",
+  "意大利",
+  "英国",
+  "德国",
+];
+const days = ["3天", "5天", "7天", "10天", "15天"];
+const preferences = [
+  "美食",
+  "购物",
+  "文化",
+  "自然",
+  "历史",
+  "艺术",
+  "亲子",
+  "情侣",
+  "独行",
+];
 
 // 计算属性
-const currentPlan = computed(() => travelStore.currentPlan)
-const planHistory = computed(() => travelStore.planHistory)
+const currentPlan = computed(() => travelStore.currentPlan);
+const planHistory = computed(() => travelStore.planHistory);
+const savedHistory = computed(() => travelStore.savedHistory);
+const isLoading = computed(() => travelStore.isLoading);
 const mapMarkers = computed(() => {
-  if (!currentPlan.value || !currentPlan.value.itinerary || !Array.isArray(currentPlan.value.itinerary)) {
-    console.log('[Plan] mapMarkers: no itinerary in currentPlan', currentPlan.value?.title)
-    return []
+  if (
+    !currentPlan.value ||
+    !currentPlan.value.itinerary ||
+    !Array.isArray(currentPlan.value.itinerary)
+  ) {
+    console.log(
+      "[Plan] mapMarkers: no itinerary in currentPlan",
+      currentPlan.value?.title
+    );
+    return [];
   }
-  
+
   const markers = currentPlan.value.itinerary.flatMap((day, dayIndex) => {
-    if (!day || !day.activities || !Array.isArray(day.activities)) return []
-    
+    if (!day || !day.activities || !Array.isArray(day.activities)) return [];
+
     return day.activities.map((activity, actIndex) => {
       // 验证坐标数据
-      let coordinates = [116.397428, 39.90923] // 默认坐标（北京）
-      
-      if (activity.coordinates && Array.isArray(activity.coordinates) && activity.coordinates.length >= 2) {
-        const [lng, lat] = activity.coordinates
+      let coordinates = [116.397428, 39.90923]; // 默认坐标（北京）
+
+      if (
+        activity.coordinates &&
+        Array.isArray(activity.coordinates) &&
+        activity.coordinates.length >= 2
+      ) {
+        const [lng, lat] = activity.coordinates;
         // 检查坐标是否为有效数字
-        if (typeof lng === 'number' && typeof lat === 'number' && 
-            !isNaN(lng) && !isNaN(lat) && 
-            lng >= -180 && lng <= 180 && 
-            lat >= -90 && lat <= 90) {
-          coordinates = [lng, lat]
+        if (
+          typeof lng === "number" &&
+          typeof lat === "number" &&
+          !isNaN(lng) &&
+          !isNaN(lat) &&
+          lng >= -180 &&
+          lng <= 180 &&
+          lat >= -90 &&
+          lat <= 90
+        ) {
+          coordinates = [lng, lat];
         } else {
-          console.warn('[Plan] invalid activity.coordinates:', activity.coordinates)
+          console.warn(
+            "[Plan] invalid activity.coordinates:",
+            activity.coordinates
+          );
         }
       } else if (activity.coordinates) {
-        console.warn('[Plan] malformed activity.coordinates:', activity.coordinates)
+        console.warn(
+          "[Plan] malformed activity.coordinates:",
+          activity.coordinates
+        );
       }
-      
+
       return {
         position: coordinates,
-        title: activity.name || '未知景点',
-        content: `<div class="marker-info">${dayIndex + 1}-${actIndex + 1}</div>`
-      }
-    })
-  })
-  console.log('[Plan] mapMarkers count:', markers.length)
-  return markers
-})
+        title: activity.name || "未知景点",
+        content: `<div class="marker-info">${dayIndex + 1}-${
+          actIndex + 1
+        }</div>`,
+      };
+    });
+  });
+  console.log("[Plan] mapMarkers count:", markers.length);
+  return markers;
+});
 
 // 语音识别相关
-let recognition = null
+let recognition = null;
 
 const initSpeechRecognition = () => {
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    recognition = new SpeechRecognition()
-    
-    recognition.lang = 'zh-CN'
-    recognition.continuous = false
-    recognition.interimResults = false
-    
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+
+    recognition.lang = "zh-CN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
     recognition.onstart = () => {
-      isRecording.value = true
-    }
-    
+      isRecording.value = true;
+    };
+
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript
-      inputText.value = transcript
-      voiceText.value = transcript
-      ElMessage.success('语音识别成功')
-    }
-    
+      const transcript = event.results[0][0].transcript;
+      inputText.value = transcript;
+      voiceText.value = transcript;
+      ElMessage.success("语音识别成功");
+    };
+
     recognition.onerror = (event) => {
-      console.error('语音识别错误:', event.error)
-      ElMessage.error('语音识别失败，请重试')
-      isRecording.value = false
-    }
-    
+      console.error("语音识别错误:", event.error);
+      ElMessage.error("语音识别失败，请重试");
+      isRecording.value = false;
+    };
+
     recognition.onend = () => {
-      isRecording.value = false
-    }
+      isRecording.value = false;
+    };
   } else {
-    ElMessage.warning('您的浏览器不支持语音识别功能')
+    ElMessage.warning("您的浏览器不支持语音识别功能");
   }
-}
+};
 
 // 切换录音状态
 const toggleRecording = async () => {
   if (!recognition) {
     // 尝试使用新的语音识别服务
     if (speechRecognition.isRecognitionSupported()) {
-      await startAdvancedListening()
+      await startAdvancedListening();
     } else {
-      ElMessage.error('语音识别未初始化')
+      ElMessage.error("语音识别未初始化");
     }
-    return
+    return;
   }
-  
+
   if (isRecording.value) {
-    recognition.stop()
+    recognition.stop();
   } else {
-    recognition.start()
+    recognition.start();
   }
-}
+};
 
 // 高级语音识别
 const startAdvancedListening = async () => {
   try {
-    const hasPermission = await speechRecognition.requestMicrophonePermission()
+    const hasPermission = await speechRecognition.requestMicrophonePermission();
     if (!hasPermission) {
-      ElMessage.error('需要麦克风权限才能使用语音输入')
-      return
+      ElMessage.error("需要麦克风权限才能使用语音输入");
+      return;
     }
 
-    isRecording.value = true
-    voiceText.value = '正在监听，请说话...'
+    isRecording.value = true;
+    voiceText.value = "正在监听，请说话...";
 
     await speechRecognition.startListening({
       onResult: (result) => {
         if (result.interim) {
-          voiceText.value = `正在识别: ${result.interim}`
+          voiceText.value = `正在识别: ${result.interim}`;
         }
         if (result.final) {
-          voiceText.value = result.final
-          inputText.value = result.final
-          isRecording.value = false
-          ElMessage.success('语音识别完成')
+          voiceText.value = result.final;
+          inputText.value = result.final;
+          isRecording.value = false;
+          ElMessage.success("语音识别完成");
         }
       },
       onError: (error) => {
-        console.error('语音识别错误:', error)
-        ElMessage.error(error)
-        isRecording.value = false
-        voiceText.value = ''
+        console.error("语音识别错误:", error);
+        ElMessage.error(error);
+        isRecording.value = false;
+        voiceText.value = "";
       },
       onEnd: () => {
-        isRecording.value = false
-        if (!voiceText.value || voiceText.value.includes('正在')) {
-          voiceText.value = ''
+        isRecording.value = false;
+        if (!voiceText.value || voiceText.value.includes("正在")) {
+          voiceText.value = "";
         }
-      }
-    })
+      },
+    });
   } catch (error) {
-    console.error('启动语音识别失败:', error)
-    ElMessage.error('启动语音识别失败')
-    isRecording.value = false
-    voiceText.value = ''
+    console.error("启动语音识别失败:", error);
+    ElMessage.error("启动语音识别失败");
+    isRecording.value = false;
+    voiceText.value = "";
   }
-}
+};
 
 // 添加到输入框
 const addToInput = (text) => {
   if (inputText.value) {
-    inputText.value += '，' + text
+    inputText.value += "，" + text;
   } else {
-    inputText.value = text
+    inputText.value = text;
   }
-}
+};
 
 // 流式响应状态
-const streamingContent = ref('')
-const isStreaming = ref(false)
+const streamingContent = ref("");
+const isStreaming = ref(false);
 
 // 生成旅行计划
 const generatePlan = async () => {
   if (!inputText.value.trim()) {
-    ElMessage.warning('请输入您的旅行需求')
-    return
+    ElMessage.warning("请输入您的旅行需求");
+    return;
   }
-  
-  isPlanning.value = true
-  isStreaming.value = true
-  streamingContent.value = ''
-  travelStore.setPlanning(true)
-  
+
+  isPlanning.value = true;
+
   try {
-    // 解析输入内容
-    const planParams = parsePlanInput(inputText.value)
-    
-    // 创建临时计划用于显示流式内容
-    const tempTitle = planParams.destination ? `${planParams.destination}${planParams.days}日游` : '旅行计划生成中...'
+    // 创建临时计划
     const tempPlan = {
-      id: Date.now(),
-      title: tempTitle,
-      summary: '正在生成旅行计划...',
-      destination: planParams.destination || '目的地识别中',
-      days: planParams.days,
-      budget: planParams.budget,
-      totalCost: planParams.budget,
+      id: Date.now().toString(),
+      title: "正在生成旅行计划...",
+      summary: "AI正在为您制定个性化的旅行计划，请稍候...",
+      destination: "分析中...",
+      days: 0,
+      budget: 0,
+      totalBudget: 0,
       itinerary: [],
+      tips: [],
       createdAt: new Date().toISOString(),
       input: inputText.value,
-      isStreaming: true
-    }
-    
-    travelStore.setPlan(tempPlan)
-    
-    // 尝试调用LLM API生成旅行计划（使用流式传输）
-    let generatedPlan
+      isStreaming: true,
+      streamingContent: "",
+    };
+
+    travelStore.setPlan(tempPlan);
+
+    // 直接传递用户的原始输入
+    const planParams = {
+      rawInput: inputText.value.trim()
+    };
+
+    console.log("[Plan] 生成计划参数:", planParams);
+
+    let generatedPlan;
     try {
       generatedPlan = await generateTravelPlan(
-        planParams, 
-        true, // 启用流式传输
+        planParams,
+        true,
         (chunk, fullContent) => {
-          // 流式回调函数
-          streamingContent.value = fullContent
-          
-          // 更新临时计划的摘要
           const updatedPlan = {
             ...tempPlan,
-            summary: fullContent.length > 100 ? fullContent.substring(0, 100) + '...' : fullContent,
-            streamingContent: fullContent
-          }
-          travelStore.setPlan(updatedPlan)
+            streamingContent: fullContent,
+          };
+          travelStore.setPlan(updatedPlan);
         }
-      )
+      );
     } catch (apiError) {
-      console.warn('LLM API调用失败，使用备用方案:', apiError)
-      generatedPlan = generateFallbackPlan(planParams)
+      console.warn("LLM API调用失败，使用备用方案:", apiError);
+      generatedPlan = generateFallbackPlan(planParams);
     }
-    
+
     // 添加额外信息
     const plan = {
       ...generatedPlan,
       id: tempPlan.id,
       createdAt: tempPlan.createdAt,
       input: inputText.value,
-      isStreaming: false
-    }
-    
-    travelStore.setPlan(plan)
-    
+      isStreaming: false,
+    };
+
+    travelStore.setPlan(plan);
+
     // 更新地图中心
-    if (plan.itinerary && plan.itinerary.length > 0 && plan.itinerary[0].activities.length > 0) {
-      const firstActivity = plan.itinerary[0].activities[0]
-      if (firstActivity.coordinates && Array.isArray(firstActivity.coordinates) && firstActivity.coordinates.length >= 2) {
-        const [lng, lat] = firstActivity.coordinates
+    if (
+      plan.itinerary &&
+      plan.itinerary.length > 0 &&
+      plan.itinerary[0].activities.length > 0
+    ) {
+      const firstActivity = plan.itinerary[0].activities[0];
+      if (
+        firstActivity.coordinates &&
+        Array.isArray(firstActivity.coordinates) &&
+        firstActivity.coordinates.length >= 2
+      ) {
+        const [lng, lat] = firstActivity.coordinates;
         // 验证坐标有效性
-        if (typeof lng === 'number' && typeof lat === 'number' && 
-            !isNaN(lng) && !isNaN(lat) && 
-            lng >= -180 && lng <= 180 && 
-            lat >= -90 && lat <= 90) {
-          mapCenter.value = [lng, lat]
-          console.log('[Plan] set center from first activity:', mapCenter.value)
+        if (
+          typeof lng === "number" &&
+          typeof lat === "number" &&
+          !isNaN(lng) &&
+          !isNaN(lat) &&
+          lng >= -180 &&
+          lng <= 180 &&
+          lat >= -90 &&
+          lat <= 90
+        ) {
+          mapCenter.value = [lng, lat];
+          console.log(
+            "[Plan] set center from first activity:",
+            mapCenter.value
+          );
           if (mapRef.value) {
-            mapRef.value.setCenter(mapCenter.value)
+            mapRef.value.setCenter(mapCenter.value);
           }
         } else {
-          console.warn('[Plan] first activity center invalid:', firstActivity.coordinates)
+          console.warn(
+            "[Plan] first activity center invalid:",
+            firstActivity.coordinates
+          );
         }
       }
     }
-    
-    ElMessage.success('旅行计划生成成功！')
-    
+
+    ElMessage.success("旅行计划生成成功！");
   } catch (error) {
-    console.error('生成计划失败:', error)
-    ElMessage.error('生成计划失败，请重试')
+    console.error("生成计划失败:", error);
+    ElMessage.error("生成计划失败，请重试");
   } finally {
-    isPlanning.value = false
-    isStreaming.value = false
-    streamingContent.value = ''
-    travelStore.setPlanning(false)
+    isPlanning.value = false;
+    isStreaming.value = false;
+    streamingContent.value = "";
+    travelStore.setPlanning(false);
   }
-}
+};
 
 // 解析输入内容
 const parsePlanInput = (input) => {
-  const trimmed = input.trim()
+  const trimmed = input.trim();
   return {
-    destination: '', // 不在前端识别，交由 LLM 从原文提取
+    destination: "", // 不在前端识别，交由 LLM 从原文提取
     days: extractDays(trimmed),
     budget: extractBudget(trimmed),
     people: extractTravelers(trimmed), // 与 llm.js 的提示词对齐
     travelers: extractTravelers(trimmed), // 保留兼容字段
     preferences: extractPreferences(trimmed),
-    startDate: new Date().toISOString().split('T')[0],
-    rawInput: trimmed
-  }
-}
+    startDate: new Date().toISOString().split("T")[0],
+    rawInput: trimmed,
+  };
+};
 
 const extractDestination = (input) => {
-  const text = input.replace(/\s+/g, ' ').trim()
+  const text = input.replace(/\s+/g, " ").trim();
 
   // 1) 基于语义关键词提取：只在“去/到/前往/目的地”等后面抓取
   const keywordPatterns = [
     /(?:目的地|去|到|前往|飞往|打算去|计划去|想到)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})(?=[,，。.!]|$)/,
     /(?:去往|前去)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})/,
-    /([A-Za-z\u4e00-\u9fa5·\-]{1,30})\s*(?:之旅|之行|行程)(?=[,，。.!]|$)/
-  ]
+    /([A-Za-z\u4e00-\u9fa5·\-]{1,30})\s*(?:之旅|之行|行程)(?=[,，。.!]|$)/,
+  ];
   for (const re of keywordPatterns) {
-    const m = text.match(re)
+    const m = text.match(re);
     if (m && m[1]) {
-      const candidate = m[1].trim()
+      const candidate = m[1].trim();
       // 避免将“日本料理/美食/动漫”等偏好误识别为目的地
-      if (!/(料理|美食|动漫|文化|历史|温泉|海滩|购物|自然|亲子)$/.test(candidate)) {
-        return candidate
+      if (
+        !/(料理|美食|动漫|文化|历史|温泉|海滩|购物|自然|亲子)$/.test(candidate)
+      ) {
+        return candidate;
       }
     }
   }
 
   // 2) 英文或拼音目的地：句末或逗号/句号前的独立词
-  const freePattern = /\b([A-Za-z][A-Za-z\s\-]{1,30})\b(?=[,，。.!]|$)/
-  const freeMatch = text.match(freePattern)
+  const freePattern = /\b([A-Za-z][A-Za-z\s\-]{1,30})\b(?=[,，。.!]|$)/;
+  const freeMatch = text.match(freePattern);
   if (freeMatch && freeMatch[1]) {
-    return freeMatch[1].trim()
+    return freeMatch[1].trim();
   }
 
-  return '目的地未识别'
-}
+  return "目的地未识别";
+};
 
 const extractDays = (input) => {
-  const dayMatch = input.match(/(\d+)\s*天/)
-  return dayMatch ? parseInt(dayMatch[1]) : 5
-}
+  const dayMatch = input.match(/(\d+)\s*天/);
+  return dayMatch ? parseInt(dayMatch[1]) : 5;
+};
 
 const extractBudget = (input) => {
-  const budgetMatch = input.match(/(\d+)\s*[万元]/)
+  const budgetMatch = input.match(/(\d+)\s*[万元]/);
   if (budgetMatch) {
-    const amount = parseInt(budgetMatch[1])
-    return input.includes('万') ? amount * 10000 : amount
+    const amount = parseInt(budgetMatch[1]);
+    return input.includes("万") ? amount * 10000 : amount;
   }
-  return 10000
-}
+  return 10000;
+};
 
 const extractTravelers = (input) => {
-  const travelerMatch = input.match(/(\d+)\s*人/)
-  return travelerMatch ? parseInt(travelerMatch[1]) : 2
-}
+  const travelerMatch = input.match(/(\d+)\s*人/);
+  return travelerMatch ? parseInt(travelerMatch[1]) : 2;
+};
 
 const extractPreferences = (input) => {
-  const preferences = ['美食', '购物', '文化', '自然', '历史', '娱乐', '动漫', '温泉', '海滩']
-  const found = preferences.filter(pref => input.includes(pref))
-  return found.join('、') || '美食、文化'
-}
+  const preferences = [
+    "美食",
+    "购物",
+    "文化",
+    "自然",
+    "历史",
+    "娱乐",
+    "动漫",
+    "温泉",
+    "海滩",
+  ];
+  const found = preferences.filter((pref) => input.includes(pref));
+  return found.join("、") || "美食、文化";
+};
 
 // 备用计划生成
 const generateFallbackPlan = (params) => {
   const lib = {
     // ... existing code ...
-  }
-  const key = Object.keys(lib).includes(params.destination) ? params.destination : '中国'
-  const spots = lib[key].spots
+  };
+  const key = Object.keys(lib).includes(params.destination)
+    ? params.destination
+    : "中国";
+  const spots = lib[key].spots;
   const buildDay = (day, items) => ({
     day,
     activities: [
-      { time: '09:00', name: items[0].name, type: '景点', coordinates: items[0].coordinates },
-      { time: '12:00', name: items[1].name, type: '美食', coordinates: items[1].coordinates },
-      { time: '15:00', name: items[2].name, type: '景点', coordinates: items[2].coordinates }
-    ]
-  })
-  const displayDest = params.destination || key
+      {
+        time: "09:00",
+        name: items[0].name,
+        type: "景点",
+        coordinates: items[0].coordinates,
+      },
+      {
+        time: "12:00",
+        name: items[1].name,
+        type: "美食",
+        coordinates: items[1].coordinates,
+      },
+      {
+        time: "15:00",
+        name: items[2].name,
+        type: "景点",
+        coordinates: items[2].coordinates,
+      },
+    ],
+  });
+  const displayDest = params.destination || key;
   return {
     title: `${displayDest}${params.days}日游`,
-    summary: '（备用方案）基于常见热门景点的简要行程',
+    summary: "（备用方案）基于常见热门景点的简要行程",
     destination: displayDest,
     days: params.days,
     budget: params.budget,
     totalCost: params.budget,
-    itinerary: [
-      buildDay(1, spots.slice(0, 3)),
-      buildDay(2, spots.slice(1, 4))
-    ]
-  }
-}
+    itinerary: [buildDay(1, spots.slice(0, 3)), buildDay(2, spots.slice(1, 4))],
+  };
+};
 
 // 加载历史计划
 const loadPlan = (plan) => {
-  travelStore.setPlan(plan)
-  inputText.value = `${plan.destination}，${plan.days}，预算${plan.budget}`
-  
+  travelStore.setPlan(plan);
+  inputText.value = `${plan.destination}，${plan.days}，预算${plan.budget}`;
+
   // 设置地图中心，带校验与格式兼容
-  let center = [116.397428, 39.90923]
-  if (plan.itinerary && plan.itinerary.length > 0 && plan.itinerary[0].activities && plan.itinerary[0].activities.length > 0) {
-    const coord = plan.itinerary[0].activities[0].coordinates
+  let center = [116.397428, 39.90923];
+  if (
+    plan.itinerary &&
+    plan.itinerary.length > 0 &&
+    plan.itinerary[0].activities &&
+    plan.itinerary[0].activities.length > 0
+  ) {
+    const coord = plan.itinerary[0].activities[0].coordinates;
     if (coord) {
-      let lng, lat
+      let lng, lat;
       if (Array.isArray(coord) && coord.length >= 2) {
-        lng = parseFloat(coord[0])
-        lat = parseFloat(coord[1])
-      } else if (typeof coord === 'object' && (coord.lng ?? coord.longitude) !== undefined && (coord.lat ?? coord.latitude) !== undefined) {
-        lng = parseFloat(coord.lng ?? coord.longitude)
-        lat = parseFloat(coord.lat ?? coord.latitude)
-      } else if (typeof coord === 'string') {
-        const parts = coord.split(',')
+        lng = parseFloat(coord[0]);
+        lat = parseFloat(coord[1]);
+      } else if (
+        typeof coord === "object" &&
+        (coord.lng ?? coord.longitude) !== undefined &&
+        (coord.lat ?? coord.latitude) !== undefined
+      ) {
+        lng = parseFloat(coord.lng ?? coord.longitude);
+        lat = parseFloat(coord.lat ?? coord.latitude);
+      } else if (typeof coord === "string") {
+        const parts = coord.split(",");
         if (parts.length >= 2) {
-          lng = parseFloat(parts[0].trim())
-          lat = parseFloat(parts[1].trim())
+          lng = parseFloat(parts[0].trim());
+          lat = parseFloat(parts[1].trim());
         }
       }
-      if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
-        center = [lng, lat]
+      if (
+        !isNaN(lng) &&
+        !isNaN(lat) &&
+        lng >= -180 &&
+        lng <= 180 &&
+        lat >= -90 &&
+        lat <= 90
+      ) {
+        center = [lng, lat];
       } else {
-        console.warn('历史计划中心坐标无效，使用默认中心:', coord)
+        console.warn("历史计划中心坐标无效，使用默认中心:", coord);
       }
     }
   }
-  mapCenter.value = center
-  console.log('[Plan] loadPlan set center:', mapCenter.value)
+  mapCenter.value = center;
+  console.log("[Plan] loadPlan set center:", mapCenter.value);
   if (mapRef.value) {
-    mapRef.value.setCenter(center)
+    mapRef.value.setCenter(center);
   }
-}
+};
 
-// 保存计划
-const savePlan = () => {
-  if (currentPlan.value) {
-    ElMessage.success('计划已保存到云端')
+// 保存计划到历史记录
+const savePlanToHistory = async () => {
+  if (!currentPlan.value) {
+    ElMessage.warning("没有可保存的计划");
+    return;
   }
-}
+
+  if (!authStore.user) {
+    ElMessage.warning("请先登录");
+    return;
+  }
+
+  try {
+    await travelStore.savePlanToHistory(currentPlan.value);
+    ElMessage.success("计划已保存到历史记录");
+
+    // 标记当前计划已保存
+    if (currentPlan.value) {
+      currentPlan.value.savedToHistory = true;
+    }
+
+    // 切换到历史记录 tab
+    activeTab.value = "history";
+
+    // 刷新历史记录
+    await loadSavedHistory();
+  } catch (error) {
+    console.error("保存计划失败:", error);
+    ElMessage.error("保存失败，请重试");
+  }
+};
+
+// 加载保存的历史记录
+const loadSavedHistory = async () => {
+  if (!authStore.user) {
+    ElMessage.warning("请先登录");
+    return;
+  }
+
+  try {
+    await travelStore.loadSavedHistory();
+  } catch (error) {
+    console.error("加载历史记录失败:", error);
+    ElMessage.error("加载历史记录失败");
+  }
+};
+
+// 从历史记录加载计划
+const loadPlanFromHistory = async (plan) => {
+  try {
+    await travelStore.loadPlanFromHistory(plan);
+    ElMessage.success("已加载历史计划");
+
+    // 切换到生成计划 tab
+    activeTab.value = "generate";
+
+    // 更新地图
+    await nextTick();
+    if (mapRef.value) {
+      mapRef.value.updateMarkers(mapMarkers.value);
+      if (mapCenter.value) {
+        mapRef.value.setCenter(mapCenter.value);
+      }
+    }
+  } catch (error) {
+    console.error("加载计划失败:", error);
+    ElMessage.error("加载计划失败");
+  }
+};
+
+// 删除当前计划
+const deletePlan = async () => {
+  if (!currentPlan.value) {
+    ElMessage.warning("没有可删除的计划");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm("确定要删除当前的旅行计划吗？", "确认删除", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+
+    // 清空当前计划
+    travelStore.clearCurrentPlan();
+    ElMessage.success("计划已删除");
+  } catch (error) {
+    if (error !== "cancel") {
+      console.error("删除计划失败:", error);
+      ElMessage.error("删除失败，请重试");
+    }
+  }
+};
+
+// 删除历史记录中的计划
+const deleteFromHistory = async (planId) => {
+  try {
+    await ElMessageBox.confirm("确定要删除这个旅行计划吗？", "确认删除", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+
+    await travelStore.deleteFromHistory(planId);
+    ElMessage.success("计划已删除");
+  } catch (error) {
+    if (error !== "cancel") {
+      console.error("删除计划失败:", error);
+      ElMessage.error("删除失败，请重试");
+    }
+  }
+};
+
+// 格式化日期
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 // 重置地图
 const resetMap = () => {
-  mapCenter.value = [116.397428, 39.90923]
-  console.log('[Plan] resetMap center:', mapCenter.value)
+  mapCenter.value = [116.397428, 39.90923];
+  console.log("[Plan] resetMap center:", mapCenter.value);
   if (mapRef.value) {
-    mapRef.value.setCenter(mapCenter.value)
-    mapRef.value.setZoom(10)
+    mapRef.value.setCenter(mapCenter.value);
+    mapRef.value.setZoom(10);
   }
-}
+};
 
 // 地图事件处理
 const onMarkerClick = (markerData, index) => {
-  ElMessage.info(`点击了：${markerData.title}`)
-}
+  ElMessage.info(`点击了：${markerData.title}`);
+};
 
 const onMapReady = (map) => {
-  console.log('地图加载完成', map)
-}
+  console.log("地图加载完成", map);
+};
 
 // 生命周期
-onMounted(() => {
-  initSpeechRecognition()
+onMounted(async () => {
+  initSpeechRecognition();
   if (speechRecognition.isRecognitionSupported()) {
-    console.log('语音识别已准备就绪')
+    console.log("语音识别已准备就绪");
   }
-})
+
+  // 如果用户已登录，加载历史记录
+  if (authStore.user) {
+    await loadSavedHistory();
+  }
+});
+
+// 监听用户登录状态变化
+watch(
+  () => authStore.user,
+  async (newUser) => {
+    if (newUser) {
+      await loadSavedHistory();
+    } else {
+      // 用户登出时清空历史记录
+      travelStore.savedHistory = [];
+    }
+  }
+);
 
 onUnmounted(() => {
   // 清理语音识别
   if (isRecording.value) {
     if (recognition) {
-      recognition.stop()
+      recognition.stop();
     }
     if (speechRecognition.isRecognitionSupported()) {
-      speechRecognition.stopListening()
+      speechRecognition.stopListening();
     }
   }
-})
+});
 </script>
 
 <style scoped>
@@ -920,21 +1291,19 @@ onUnmounted(() => {
   .plan-container {
     flex-direction: column;
   }
-  
+
   .input-panel {
     width: 100%;
     height: 50vh;
   }
-  
+
   .plan-details {
     position: static;
     width: 100%;
     margin-top: 20px;
   }
 }
-</style>
 
-<style>
 .marker-info h4 {
   margin: 0 0 5px 0;
   color: #303133;
@@ -944,5 +1313,246 @@ onUnmounted(() => {
   margin: 0;
   font-size: 12px;
   color: #606266;
+}
+
+.plan-tabs {
+  margin-bottom: 20px;
+}
+
+.generate-section,
+.history-section {
+  padding: 10px 0;
+}
+
+.temp-history-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ebeef5;
+}
+
+.temp-history-section h4 {
+  color: #909399;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.history-header h4 {
+  margin: 0;
+  color: #303133;
+}
+
+.loading-state {
+  padding: 20px;
+}
+
+.empty-history {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.saved-history-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.saved-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  margin-bottom: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.saved-history-item:hover {
+  background: #e3f2fd;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.history-content {
+  flex: 1;
+}
+
+.history-title {
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 5px;
+}
+
+.history-destination {
+  color: #606266;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.history-info {
+  color: #909399;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.history-date {
+  color: #c0c4cc;
+  font-size: 11px;
+}
+
+.history-actions {
+  margin-left: 15px;
+}
+
+.plan-actions {
+  margin-top: 10px;
+}
+
+.voice-text {
+  margin-top: 10px;
+}
+
+.history-content {
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.history-info {
+  font-size: 12px;
+  color: #909399;
+}
+
+.map-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.map-header h3 {
+  margin: 0;
+  color: #303133;
+}
+
+.map-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.plan-details {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 300px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.detail-card {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.plan-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.day-item {
+  margin-bottom: 20px;
+}
+
+.day-item h4 {
+  margin: 0 0 10px 0;
+  color: #409eff;
+  font-size: 16px;
+}
+
+.day-item ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.day-item li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.activity-type {
+  display: inline-block;
+  background: #f0f9ff;
+  color: #409eff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.streaming-content {
+  margin-bottom: 20px;
+}
+
+.streaming-text {
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.empty-content {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+@media (max-width: 768px) {
+  .plan-container {
+    flex-direction: column;
+  }
+
+  .input-panel {
+    width: 100%;
+    height: 50vh;
+  }
+
+  .plan-details {
+    position: static;
+    width: 100%;
+    margin-top: 20px;
+  }
 }
 </style>
