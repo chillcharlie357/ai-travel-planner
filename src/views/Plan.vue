@@ -202,8 +202,9 @@
 
         <MapComponent
           ref="mapRef"
-          height="calc(100vh - 140px)"
+          height="100%"
           :markers="mapMarkers"
+          :itinerary="currentPlan?.itinerary || []"
           :center="mapCenter"
           @marker-click="onMarkerClick"
           @map-ready="onMapReady"

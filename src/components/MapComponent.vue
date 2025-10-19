@@ -24,6 +24,11 @@ const props = defineProps({
   markers: {
     type: Array,
     default: () => []
+  },
+  // 新增：行程数据，用于绘制有向线段
+  itinerary: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -33,6 +38,7 @@ const mapContainer = ref(null)
 const loading = ref(true)
 let map = null
 let markerInstances = []
+let polylineInstances = [] // 存储有向线段实例
 
 // 初始化地图（统一使用Leaflet + OpenStreetMap）
 const initMap = async () => {
@@ -64,6 +70,9 @@ const initLeafletMap = async () => {
       document.head.appendChild(link)
     }
 
+    // 等待容器准备就绪
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     const center = props.center || [0, 0]
     const leafletCenter = Array.isArray(center) ? [center[1], center[0]] : [0, 0] // Leaflet使用[lat, lng]
 
@@ -79,6 +88,13 @@ const initLeafletMap = async () => {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19
     }).addTo(map)
+
+    // 强制重新计算地图尺寸
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize()
+      }
+    }, 200)
 
     console.log('[Map] Leaflet地图初始化成功')
     loading.value = false
@@ -120,6 +136,12 @@ const clearMarkers = () => {
     map.removeLayer(marker)
   })
   markerInstances = []
+  
+  // 清除现有线段
+  polylineInstances.forEach(polyline => {
+    map.removeLayer(polyline)
+  })
+  polylineInstances = []
 }
 
 // 更新Leaflet标记点
@@ -178,10 +200,37 @@ const updateLeafletMarkers = async () => {
           emit('markerClick', markerData, index)
         })
 
-        // 如果有标题，添加弹窗
-        const labelText = markerData.title || markerData.label || ''
-        if (labelText) {
-          markerInstance.bindPopup(labelText)
+        // 添加鼠标悬浮事件显示活动详情
+        if (markerData.activity) {
+          const activity = markerData.activity
+          const popupContent = `
+            <div class="activity-popup">
+              <h4>${activity.name || '未知活动'}</h4>
+              <p><strong>时间:</strong> ${activity.time || '未知时间'}</p>
+              <p><strong>类型:</strong> ${activity.type || '未知类型'}</p>
+              ${activity.description ? `<p><strong>描述:</strong> ${activity.description}</p>` : ''}
+              ${activity.location ? `<p><strong>地点:</strong> ${activity.location}</p>` : ''}
+              ${activity.estimatedCost ? `<p><strong>预估费用:</strong> ¥${activity.estimatedCost}</p>` : ''}
+              ${activity.duration ? `<p><strong>建议游玩时长:</strong> ${activity.duration}</p>` : ''}
+            </div>
+          `
+          
+          markerInstance.bindPopup(popupContent)
+          
+          // 鼠标悬浮显示弹窗
+          markerInstance.on('mouseover', function() {
+            this.openPopup()
+          })
+          
+          markerInstance.on('mouseout', function() {
+            this.closePopup()
+          })
+        } else {
+          // 如果没有活动详情，显示基本信息
+          const labelText = markerData.title || markerData.label || ''
+          if (labelText) {
+            markerInstance.bindPopup(labelText)
+          }
         }
       } catch (error) {
         console.error('创建Leaflet标记点失败:', error, markerData)
@@ -191,6 +240,9 @@ const updateLeafletMarkers = async () => {
       console.warn('跳过无效标记点位置:', markerData.position)
     }
   })
+
+  // 绘制有向线段连接同一天的活动
+  drawActivityLines()
 
   // 如果有有效标记点，调整地图视野
   if (validPositions.length > 0 && markerInstances.length > 0) {
@@ -202,6 +254,99 @@ const updateLeafletMarkers = async () => {
       console.warn('[Map] leaflet fitBounds failed:', e)
     }
   }
+}
+
+// 绘制有向线段连接同一天的活动
+const drawActivityLines = async () => {
+  if (!map || !Array.isArray(props.itinerary) || props.itinerary.length === 0) {
+    return
+  }
+
+  const L = await import('leaflet')
+  
+  // 为每一天的活动绘制连接线
+  props.itinerary.forEach((day, dayIndex) => {
+    if (!day.activities || !Array.isArray(day.activities) || day.activities.length < 2) {
+      return // 少于2个活动无需连线
+    }
+
+    const dayColors = [
+      '#409EFF', // 蓝色 - 第1天
+      '#67C23A', // 绿色 - 第2天  
+      '#E6A23C', // 橙色 - 第3天
+      '#F56C6C', // 红色 - 第4天
+      '#909399', // 灰色 - 第5天
+      '#9C27B0', // 紫色 - 第6天
+      '#FF9800', // 深橙 - 第7天
+      '#795548'  // 棕色 - 第8天及以上
+    ]
+    
+    const lineColor = dayColors[dayIndex % dayColors.length]
+    
+    // 获取当天所有有效的活动坐标
+    const dayCoordinates = []
+    
+    day.activities.forEach((activity, actIndex) => {
+      let lng, lat
+      
+      if (activity.coordinates && Array.isArray(activity.coordinates) && activity.coordinates.length >= 2) {
+        lng = parseFloat(activity.coordinates[0])
+        lat = parseFloat(activity.coordinates[1])
+        
+        if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+          dayCoordinates.push([lat, lng]) // Leaflet使用[lat, lng]格式
+        }
+      }
+    })
+    
+    // 如果有足够的坐标点，绘制连接线
+    if (dayCoordinates.length >= 2) {
+      try {
+        // 创建折线
+        const polyline = L.polyline(dayCoordinates, {
+          color: lineColor,
+          weight: 3,
+          opacity: 0.8,
+          dashArray: '5, 10' // 虚线样式
+        }).addTo(map)
+        
+        polylineInstances.push(polyline)
+        
+        // 添加箭头标记表示方向
+        for (let i = 0; i < dayCoordinates.length - 1; i++) {
+          const start = dayCoordinates[i]
+          const end = dayCoordinates[i + 1]
+          
+          // 计算箭头位置（线段中点）
+          const midLat = (start[0] + end[0]) / 2
+          const midLng = (start[1] + end[1]) / 2
+          
+          // 计算箭头角度
+          const angle = Math.atan2(end[0] - start[0], end[1] - start[1]) * 180 / Math.PI
+          
+          // 创建箭头标记
+          const arrowIcon = L.divIcon({
+            html: `<div class="arrow-marker" style="transform: rotate(${angle}deg); color: ${lineColor};">➤</div>`,
+            className: 'arrow-leaflet-marker',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          })
+          
+          const arrowMarker = L.marker([midLat, midLng], {
+            icon: arrowIcon,
+            interactive: false // 箭头不可交互
+          }).addTo(map)
+          
+          polylineInstances.push(arrowMarker)
+        }
+        
+        console.log(`[Map] 第${dayIndex + 1}天活动连线已绘制，共${dayCoordinates.length}个点`)
+        
+      } catch (error) {
+        console.error(`绘制第${dayIndex + 1}天活动连线失败:`, error)
+      }
+    }
+  })
 }
 
 // 添加Leaflet CSS样式
@@ -229,6 +374,43 @@ const addLeafletStyles = () => {
       font-size: 14px;
       border: 2px solid white;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    .arrow-leaflet-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+    
+    .arrow-marker {
+      font-size: 16px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+    }
+    
+    .activity-popup {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 250px;
+    }
+    
+    .activity-popup h4 {
+      margin: 0 0 8px 0;
+      color: #409EFF;
+      font-size: 16px;
+    }
+    
+    .activity-popup p {
+      margin: 4px 0;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    
+    .activity-popup strong {
+      color: #303133;
     }
    `
    document.head.appendChild(style)
@@ -264,6 +446,13 @@ watch(() => props.center, (newCenter) => {
   }
 })
 
+// 监听行程数据变化
+watch(() => props.itinerary, () => {
+  if (map) {
+    updateMarkers()
+  }
+}, { deep: true })
+
 // 监听标记点变化
 watch(() => props.markers, updateMarkers, { deep: true })
 
@@ -280,7 +469,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (map) {
-    map.destroy()
+    map.remove()
   }
 })
 
@@ -311,6 +500,7 @@ defineExpose({
 .map-container {
   position: relative;
   width: 100%;
+  height: 100%;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
@@ -318,6 +508,7 @@ defineExpose({
 
 .map {
   width: 100%;
+  height: 100%;
   position: relative;
   z-index: 1;
 }
