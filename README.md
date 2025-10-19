@@ -19,7 +19,7 @@
 - **路由**: Vue Router
 - **构建工具**: Vite
 - **后端服务**: Supabase
-- **地图服务**: 高德地图 API
+- **地图服务**: OpenStreetMap
 - **语音识别**: Web Speech API
 
 ## 项目结构
@@ -53,7 +53,6 @@ cp .env.example .env
 配置以下环境变量：
 - `VITE_SUPABASE_URL`: Supabase 项目 URL
 - `VITE_SUPABASE_ANON_KEY`: Supabase 匿名密钥
-- `VITE_AMAP_KEY`: 高德地图 API 密钥
 
 ### 启动开发服务器
 

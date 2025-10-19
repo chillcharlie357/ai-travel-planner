@@ -12,11 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@amap/amap-jsapi-loader": "^1.0.1",
     "@element-plus/icons-vue": "^2.3.2",
     "@supabase/supabase-js": "^2.75.0",
     "axios": "^1.12.2",
     "element-plus": "^2.11.4",
+    "leaflet": "^1.9.4",
     "openai": "^6.4.0",
     "pinia": "^3.0.3",
     "sortablejs": "^1.15.6",

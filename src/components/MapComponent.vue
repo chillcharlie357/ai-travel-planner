@@ -1,14 +1,12 @@
 <template>
   <div class="map-container">
     <div ref="mapContainer" class="map" :style="{ height: height }"></div>
-    <!-- 移除 v-loading 灰色遮罩，避免高倍率下挡住地图 -->
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import AMapLoader from '@amap/amap-jsapi-loader'
-import { config } from '@/config'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   height: {
@@ -35,60 +33,64 @@ const mapContainer = ref(null)
 const loading = ref(true)
 let map = null
 let markerInstances = []
-let textInstances = []
 
-// 初始化地图
+// 初始化地图（统一使用Leaflet + OpenStreetMap）
 const initMap = async () => {
   try {
     loading.value = true
-    
-    const AMap = await AMapLoader.load({
-      key: config.gaode.key,
-      version: config.gaode.version,
-      plugins: config.gaode.plugins
-    })
-
-    map = new AMap.Map(mapContainer.value, {
-      center: props.center,
-      zoom: props.zoom,
-      mapStyle: 'amap://styles/normal',
-      viewMode: '2D',
-      pitch: 0,
-      features: ['bg', 'point', 'road', 'building'],
-      showLabel: true,
-      showBuildingBlock: false
-    })
-    console.log('[Map] initMap center:', props.center, 'zoom:', props.zoom, 'markers:', Array.isArray(props.markers) ? props.markers.length : 0)
-
-    // 添加工具栏
-    const toolbar = new AMap.ToolBar({
-      position: {
-        top: '10px',
-        right: '10px'
-      }
-    })
-    map.addControl(toolbar)
-
-    // 添加比例尺
-    const scale = new AMap.Scale({
-      position: {
-        bottom: '10px',
-        left: '10px'
-      }
-    })
-    map.addControl(scale)
-
-    // 地图加载完成
-    map.on('complete', () => {
-      loading.value = false
-      emit('mapReady', map)
-    })
-
-    // 更新标记点
-    updateMarkers()
-
+    await initLeafletMap()
   } catch (error) {
     console.error('地图初始化失败:', error)
+    ElMessage.error('地图加载失败，请检查网络连接')
+    loading.value = false
+  }
+}
+
+// 初始化Leaflet地图
+const initLeafletMap = async () => {
+  try {
+    // 动态导入Leaflet
+    const L = await import('leaflet')
+    
+    // 添加Leaflet样式
+    addLeafletStyles()
+    
+    // 导入Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link')
+      link.id = 'leaflet-css'
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+    }
+
+    const center = props.center || [0, 0]
+    const leafletCenter = Array.isArray(center) ? [center[1], center[0]] : [0, 0] // Leaflet使用[lat, lng]
+
+    // 创建Leaflet地图
+    map = L.map(mapContainer.value, {
+      center: leafletCenter,
+      zoom: props.zoom || 10,
+      zoomControl: true
+    })
+
+    // 添加OpenStreetMap图层
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map)
+
+    console.log('[Map] Leaflet地图初始化成功')
+    loading.value = false
+    
+    // 触发地图就绪事件
+    emit('mapReady', map)
+    
+    // 初始化标记点
+    updateMarkers()
+    
+  } catch (error) {
+    console.error('Leaflet地图初始化失败:', error)
     ElMessage.error('地图加载失败，请检查网络连接')
     loading.value = false
   }
@@ -100,21 +102,31 @@ const updateMarkers = () => {
 
   console.log('[Map] updateMarkers count:', Array.isArray(props.markers) ? props.markers.length : 0)
 
-  // 清除现有标记
-  markerInstances.forEach(marker => {
-    map.remove(marker)
-  })
-  markerInstances = []
+  // 清除现有标记点
+  clearMarkers()
 
-  // 清除文本标签
-  if (textInstances.length) {
-    map.remove(textInstances)
-    textInstances = []
+  if (!Array.isArray(props.markers) || props.markers.length === 0) {
+    return
   }
 
-  const validPositions = []
+  // 统一使用Leaflet标记点
+  updateLeafletMarkers()
+}
 
-  // 添加新标记（带坐标校验与规范化）
+// 清除标记点
+const clearMarkers = () => {
+  // 清除现有标记
+  markerInstances.forEach(marker => {
+    map.removeLayer(marker)
+  })
+  markerInstances = []
+}
+
+// 更新Leaflet标记点
+const updateLeafletMarkers = async () => {
+  const L = await import('leaflet')
+  const validPositions = []
+  
   props.markers.forEach((markerData, index) => {
     let pos = markerData.position
     let lng, lat
@@ -142,47 +154,37 @@ const updateMarkers = () => {
     console.log('[Map] marker parsed:', { lng, lat })
 
     if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
-      const normalized = [lng, lat]
-      const marker = new AMap.Marker({
-        position: normalized,
-        title: markerData.title || '',
-        content: markerData.content || `<div class="custom-marker">${index + 1}</div>`,
-        anchor: 'center',
-        offset: new AMap.Pixel(0, 0),
-        zIndex: 1000,
-        clickable: true,
-        bubble: false
-      })
-
-      marker.on('click', () => {
-        emit('markerClick', markerData, index)
-      })
-
-      map.add(marker)
-      markerInstances.push(marker)
-      validPositions.push(normalized)
-      console.log('[Map] marker added at:', normalized)
-
-      // 添加文本标签显示景点名称
-      const labelText = markerData.title || markerData.label || ''
-      if (labelText) {
-        const text = new AMap.Text({
-          text: labelText,
-          position: normalized,
-          anchor: 'bottom-center',
-          style: {
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            border: '1px solid #dcdcdc',
-            borderRadius: '4px',
-            padding: '2px 6px',
-            color: '#333',
-            fontSize: '12px',
-            lineHeight: '16px'
-          },
-          offset: new AMap.Pixel(0, -26)
+      try {
+        // 创建自定义图标
+        const customIcon = L.divIcon({
+          html: `<div class="custom-marker">${index + 1}</div>`,
+          className: 'custom-leaflet-marker',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
         })
-        map.add(text)
-        textInstances.push(text)
+
+        // 创建标记点 (Leaflet使用[lat, lng]格式)
+        const markerInstance = L.marker([lat, lng], {
+          icon: customIcon,
+          title: markerData.title || `标记点 ${index + 1}`
+        }).addTo(map)
+
+        markerInstances.push(markerInstance)
+        validPositions.push([lng, lat])
+        console.log('[Map] leaflet marker added at:', [lng, lat])
+
+        // 添加点击事件
+        markerInstance.on('click', () => {
+          emit('markerClick', markerData, index)
+        })
+
+        // 如果有标题，添加弹窗
+        const labelText = markerData.title || markerData.label || ''
+        if (labelText) {
+          markerInstance.bindPopup(labelText)
+        }
+      } catch (error) {
+        console.error('创建Leaflet标记点失败:', error, markerData)
       }
     } else {
       console.warn('[Map] invalid marker position:', markerData.position, { lng, lat })
@@ -191,23 +193,45 @@ const updateMarkers = () => {
   })
 
   // 如果有有效标记点，调整地图视野
-  if (validPositions.length > 0) {
+  if (validPositions.length > 0 && markerInstances.length > 0) {
     try {
-      console.log('[Map] setFitView with markers:', markerInstances.length)
-      map.setFitView(markerInstances, false, [20, 20, 20, 20])
+      const group = new L.featureGroup(markerInstances)
+      map.fitBounds(group.getBounds(), { padding: [20, 20] })
+      console.log('[Map] leaflet fitBounds with markers:', markerInstances.length)
     } catch (e) {
-      console.warn('[Map] setFitView failed, fallback to setBounds:', e)
-      const minLng = Math.min(...validPositions.map(p => p[0]))
-      const maxLng = Math.max(...validPositions.map(p => p[0]))
-      const minLat = Math.min(...validPositions.map(p => p[1]))
-      const maxLat = Math.max(...validPositions.map(p => p[1]))
-      console.log('[Map] computed bounds:', { minLng, minLat, maxLng, maxLat })
-      const sw = new AMap.LngLat(minLng, minLat)
-      const ne = new AMap.LngLat(maxLng, maxLat)
-      const bounds = new AMap.Bounds(sw, ne)
-      map.setBounds(bounds, false, [20, 20, 20, 20])
+      console.warn('[Map] leaflet fitBounds failed:', e)
     }
   }
+}
+
+// 添加Leaflet CSS样式
+const addLeafletStyles = () => {
+  if (document.getElementById('leaflet-styles')) return
+
+  const style = document.createElement('style')
+  style.id = 'leaflet-styles'
+  style.textContent = `
+    .custom-leaflet-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+    
+    .custom-leaflet-marker .custom-marker {
+      width: 32px;
+      height: 32px;
+      background: #409EFF;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      border: 2px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+   `
+   document.head.appendChild(style)
 }
 
 // 监听中心点变化
@@ -264,7 +288,11 @@ onUnmounted(() => {
 defineExpose({
   getMap: () => map,
   setCenter: (center) => {
-    if (map) map.setCenter(center)
+    if (map && Array.isArray(center) && center.length >= 2) {
+      // Leaflet使用setView方法，参数顺序是[lat, lng]
+      const [lng, lat] = center
+      map.setView([lat, lng], map.getZoom())
+    }
   },
   setZoom: (zoom) => {
     if (map) map.setZoom(zoom)
@@ -300,20 +328,6 @@ defineExpose({
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
-}
-
-/* 覆盖高德地图可能的默认样式 */
-.amap-container * {
-  box-sizing: border-box !important;
-}
-
-/* 确保marker容器不被遮挡 */
-.amap-marker {
-  z-index: 9999 !important;
-}
-
-.amap-marker-content {
-  z-index: 9999 !important;
 }
 </style>
 

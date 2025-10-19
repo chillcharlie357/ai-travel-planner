@@ -1,12 +1,5 @@
 // API配置管理
 const config = {
-  // 高德地图API配置
-  gaode: {
-    key: import.meta.env.VITE_GAODE_MAP_KEY || 'demo_key_for_development',
-    version: '2.0',
-    plugins: ['AMap.ToolBar', 'AMap.Scale', 'AMap.Marker', 'AMap.Geocoder', 'AMap.Text']
-  },
-  
   // LLM API配置
   llm: {
     apiUrl: import.meta.env.VITE_LLM_API_URL || 'https://api.openai.com/v1/chat/completions',
@@ -34,10 +27,6 @@ const config = {
 // 验证配置完整性
 export const validateConfig = () => {
   const errors = []
-  
-  if (!config.gaode.key || config.gaode.key === 'demo_key_for_development') {
-    errors.push('高德地图API密钥未配置')
-  }
   
   if (!config.llm.apiKey) {
     errors.push('LLM API密钥未配置')

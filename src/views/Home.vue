@@ -62,7 +62,7 @@
               <el-icon><Location /></el-icon>
             </div>
             <h3>地图导航</h3>
-            <p>基于高德地图，直观展示行程路线，实时导航让旅行更轻松</p>
+            <p>基于OpenStreetMap，直观展示行程路线，实时导航让旅行更轻松</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">
