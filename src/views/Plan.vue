@@ -1710,12 +1710,13 @@ onUnmounted(() => {
   box-shadow: none;
   border: none;
   height: calc(100% - 40px);
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .detail-card .el-card__body {
   padding: 0;
   height: 100%;
+  overflow-y: auto;
 }
 
 .card-header {
@@ -2267,8 +2268,8 @@ onUnmounted(() => {
 }
 
 .plan-content {
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: none; /* 移除高度限制 */
+  overflow-y: visible; /* 允许内容完全显示 */
 }
 
 .day-item {
