@@ -210,11 +210,33 @@
         />
 
         <!-- 行程详情 -->
-        <div v-if="currentPlan" class="plan-details">
+        <div 
+          v-if="currentPlan" 
+          class="plan-details"
+          ref="planDetailsRef"
+          :style="planDetailsStyle"
+        >
+          <!-- 缩放手柄容器 - 覆盖整个面板 -->
+          <div class="resize-handles">
+            <div class="resize-handle resize-handle-nw" @mousedown="startResize('nw', $event)"></div>
+            <div class="resize-handle resize-handle-ne" @mousedown="startResize('ne', $event)"></div>
+            <div class="resize-handle resize-handle-sw" @mousedown="startResize('sw', $event)"></div>
+            <div class="resize-handle resize-handle-se" @mousedown="startResize('se', $event)"></div>
+            <div class="resize-handle resize-handle-n" @mousedown="startResize('n', $event)"></div>
+            <div class="resize-handle resize-handle-s" @mousedown="startResize('s', $event)"></div>
+            <div class="resize-handle resize-handle-w" @mousedown="startResize('w', $event)"></div>
+            <div class="resize-handle resize-handle-e" @mousedown="startResize('e', $event)"></div>
+          </div>
+          
+          <div class="panel-header" @mousedown="startDrag">
+            <div class="drag-indicator">
+              <span>⋮⋮</span>
+              <span>{{ currentPlan.destination }}行程</span>
+            </div>
+          </div>
           <el-card class="detail-card">
             <template #header>
               <div class="card-header">
-                <span>{{ currentPlan.destination }}行程</span>
                 <div class="header-actions">
                   <el-tag v-if="isStreaming" type="info" effect="plain">
                     <el-icon class="is-loading"><Loading /></el-icon>
@@ -267,20 +289,170 @@
                 v-else-if="
                   currentPlan.itinerary && currentPlan.itinerary.length > 0
                 "
+                class="itinerary-container"
               >
+                <!-- 展示控制按钮 -->
+                <div class="display-controls">
+                  <el-button-group size="small">
+                    <el-button 
+                      :type="displayMode === 'compact' ? 'primary' : ''"
+                      @click="displayMode = 'compact'"
+                    >
+                      简洁视图
+                    </el-button>
+                    <el-button 
+                      :type="displayMode === 'detailed' ? 'primary' : ''"
+                      @click="displayMode = 'detailed'"
+                    >
+                      详细视图
+                    </el-button>
+                  </el-button-group>
+                  <el-button 
+                    size="small" 
+                    :icon="isExpanded ? 'ArrowUp' : 'ArrowDown'"
+                    @click="toggleExpanded"
+                  >
+                    {{ isExpanded ? '收起' : '展开全部' }}
+                  </el-button>
+                </div>
+
                 <div
                   v-for="(day, index) in currentPlan.itinerary"
                   :key="index"
                   class="day-item"
                 >
-                  <h4>第{{ index + 1 }}天</h4>
-                  <ul>
-                    <li
-                      v-for="(activity, actIndex) in day.activities"
-                      :key="actIndex"
-                    >
-                      {{ activity.time }} - {{ activity.name }}
-                      <span class="activity-type">{{ activity.type }}</span>
+                  <div class="day-header" @click="toggleDay(index)">
+                    <h4>第{{ index + 1 }}天</h4>
+                    <div class="day-summary">
+                      <span v-if="day.activities" class="activity-count">
+                        {{ day.activities.length }}个活动
+                      </span>
+                      <span v-if="day.dailyTotal" class="daily-cost">
+                        预算: ¥{{ day.dailyTotal }}
+                      </span>
+                      <el-icon class="expand-icon" :class="{ 'expanded': expandedDays.includes(index) }">
+                        <ArrowDown />
+                      </el-icon>
+                    </div>
+                  </div>
+
+                  <el-collapse-transition>
+                    <div v-show="isExpanded || expandedDays.includes(index)" class="day-content">
+                      <!-- 简洁视图 -->
+                      <div v-if="displayMode === 'compact'" class="activities-compact">
+                        <draggable
+                          v-model="day.activities"
+                          group="activities"
+                          item-key="name"
+                          class="draggable-list"
+                          @change="onActivityDragChange"
+                        >
+                          <template #item="{ element: activity, index: actIndex }">
+                            <div
+                              class="activity-item-compact draggable-item"
+                              :key="actIndex"
+                            >
+                              <div class="drag-handle">⋮⋮</div>
+                              <div class="activity-time">{{ activity.time }}</div>
+                              <div class="activity-info">
+                                <span class="activity-name">{{ activity.name }}</span>
+                                <el-tag size="small" class="activity-type">{{ activity.type }}</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </draggable>
+                      </div>
+
+                      <!-- 详细视图 -->
+                      <div v-else class="activities-detailed">
+                        <draggable
+                          v-model="day.activities"
+                          group="activities"
+                          item-key="name"
+                          class="draggable-list"
+                          @change="onActivityDragChange"
+                        >
+                          <template #item="{ element: activity, index: actIndex }">
+                            <div
+                              class="activity-item-detailed draggable-item"
+                              :key="actIndex"
+                            >
+                              <div class="drag-handle">⋮⋮</div>
+                              <div class="activity-content">
+                                <div class="activity-header">
+                                  <div class="activity-time-detailed">{{ activity.time }}</div>
+                                  <div class="activity-main">
+                                    <h5 class="activity-name-detailed">{{ activity.name }}</h5>
+                                    <div class="activity-meta">
+                                      <el-tag size="small" :type="getActivityTypeColor(activity.type)">
+                                        {{ activity.type }}
+                                      </el-tag>
+                                      <span v-if="activity.duration" class="duration">
+                                        <el-icon><Clock /></el-icon>
+                                        {{ activity.duration }}
+                                      </span>
+                                      <span v-if="activity.estimatedCost" class="cost">
+                                        <el-icon><Money /></el-icon>
+                                        ¥{{ activity.estimatedCost }}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div v-if="activity.description" class="activity-description">
+                                  {{ activity.description }}
+                                </div>
+                                
+                                <div v-if="activity.location" class="activity-location">
+                                  <el-icon><Location /></el-icon>
+                                  {{ activity.location }}
+                                </div>
+                              </div>
+                            </div>
+                          </template>
+                        </draggable>
+
+                        <!-- 当日餐饮信息 -->
+                        <div v-if="day.meals && day.meals.length > 0" class="day-meals">
+                          <h6>餐饮安排</h6>
+                          <div class="meals-list">
+                            <div
+                              v-for="(meal, mealIndex) in day.meals"
+                              :key="mealIndex"
+                              class="meal-item"
+                            >
+                              <el-tag size="small" type="success">{{ meal.type }}</el-tag>
+                              <span class="meal-restaurant">{{ meal.restaurant }}</span>
+                              <span v-if="meal.estimatedCost" class="meal-cost">¥{{ meal.estimatedCost }}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- 当日住宿信息 -->
+                        <div v-if="day.accommodation" class="day-accommodation">
+                          <h6>住宿安排</h6>
+                          <div class="accommodation-info">
+                            <span class="hotel-name">{{ day.accommodation.name }}</span>
+                            <el-tag size="small" type="info">{{ day.accommodation.type }}</el-tag>
+                            <span v-if="day.accommodation.estimatedCost" class="hotel-cost">
+                              ¥{{ day.accommodation.estimatedCost }}/晚
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </el-collapse-transition>
+                </div>
+
+                <!-- 旅行贴士 -->
+                <div v-if="currentPlan.tips && currentPlan.tips.length > 0" class="travel-tips">
+                  <h5>
+                    <el-icon><InfoFilled /></el-icon>
+                    旅行贴士
+                  </h5>
+                  <ul class="tips-list">
+                    <li v-for="(tip, tipIndex) in currentPlan.tips" :key="tipIndex">
+                      {{ tip }}
                     </li>
                   </ul>
                 </div>
@@ -309,6 +481,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useTravelStore } from "@/stores/travel";
 import { useUserStore } from '@/stores/user'
 import MapComponent from "@/components/MapComponent.vue";
+import draggable from 'vuedraggable';
 import {
   Microphone,
   VideoPause,
@@ -317,6 +490,12 @@ import {
   Loading,
   DocumentAdd,
   Delete,
+  ArrowDown,
+  ArrowUp,
+  Clock,
+  Money,
+  Location,
+  InfoFilled,
 } from "@element-plus/icons-vue";
 import { generateTravelPlan } from "@/services/llm";
 import speechRecognition from "@/services/speech";
@@ -333,6 +512,23 @@ const isRecording = ref(false);
 const isPlanning = ref(false);
 const mapRef = ref(null);
 const mapCenter = ref([116.397428, 39.90923]);
+
+// 计划展示相关状态
+const displayMode = ref('compact'); // 'compact' | 'detailed'
+const isExpanded = ref(false); // 是否展开全部
+const expandedDays = ref([]); // 展开的天数索引数组
+
+// 面板拖拽和缩放相关状态
+const planDetailsRef = ref(null);
+const isDragging = ref(false);
+const isResizing = ref(false);
+const resizeDirection = ref('');
+const dragStartPos = ref({ x: 0, y: 0 });
+const panelPosition = ref({ x: 20, y: 80 });
+const panelSize = ref({ width: 300, height: 600 });
+const initialMousePos = ref({ x: 0, y: 0 });
+const initialPanelPos = ref({ x: 0, y: 0 });
+const initialPanelSize = ref({ width: 0, height: 0 });
 
 // 快捷选项数据
 const destinations = [
@@ -365,6 +561,19 @@ const currentPlan = computed(() => travelStore.currentPlan);
 const planHistory = computed(() => travelStore.planHistory);
 const savedHistory = computed(() => travelStore.savedHistory);
 const isLoading = computed(() => travelStore.isLoading);
+
+// 面板样式计算属性
+const planDetailsStyle = computed(() => ({
+  position: 'absolute',
+  left: `${panelPosition.value.x}px`,
+  top: `${panelPosition.value.y}px`,
+  width: `${panelSize.value.width}px`,
+  height: `${panelSize.value.height}px`,
+  zIndex: 1000,
+  cursor: isDragging.value ? 'grabbing' : 'default',
+  userSelect: 'none'
+}));
+
 const mapMarkers = computed(() => {
   if (
     !currentPlan.value ||
@@ -912,6 +1121,50 @@ const loadPlanFromHistory = async (plan) => {
   }
 };
 
+// 计划展示相关方法
+const toggleExpanded = () => {
+  isExpanded.value = !isExpanded.value;
+  if (isExpanded.value) {
+    // 展开全部时，清空单独展开的天数
+    expandedDays.value = [];
+  }
+};
+
+const toggleDay = (dayIndex) => {
+  if (isExpanded.value) return; // 全部展开时不处理单独切换
+  
+  const index = expandedDays.value.indexOf(dayIndex);
+  if (index > -1) {
+    expandedDays.value.splice(index, 1);
+  } else {
+    expandedDays.value.push(dayIndex);
+  }
+};
+
+const getActivityTypeColor = (type) => {
+  const colorMap = {
+    '景点': 'primary',
+    '美食': 'success',
+    '购物': 'warning',
+    '交通': 'info',
+    '住宿': 'danger',
+    '娱乐': 'primary',
+    '文化': 'success',
+    '自然': 'warning'
+  };
+  return colorMap[type] || '';
+};
+
+// 拖拽相关方法
+const onActivityDragChange = (evt) => {
+  console.log('Activity drag change:', evt);
+  // 可以在这里添加拖拽后的处理逻辑，比如保存到本地存储
+  if (evt.moved || evt.added || evt.removed) {
+    // 触发计划更新
+    ElMessage.success('活动顺序已更新');
+  }
+};
+
 // 删除当前计划
 const deletePlan = async () => {
   if (!currentPlan.value) {
@@ -954,6 +1207,123 @@ const deleteFromHistory = async (planId) => {
       ElMessage.error("删除失败，请重试");
     }
   }
+};
+
+// 拖拽和缩放相关方法
+const startDrag = (e) => {
+  e.preventDefault();
+  isDragging.value = true;
+  initialMousePos.value = { x: e.clientX, y: e.clientY };
+  initialPanelPos.value = { ...panelPosition.value };
+  
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+};
+
+const onDrag = (e) => {
+  if (!isDragging.value) return;
+  
+  const deltaX = e.clientX - initialMousePos.value.x;
+  const deltaY = e.clientY - initialMousePos.value.y;
+  
+  panelPosition.value = {
+    x: Math.max(0, Math.min(window.innerWidth - panelSize.value.width, initialPanelPos.value.x + deltaX)),
+    y: Math.max(0, Math.min(window.innerHeight - panelSize.value.height, initialPanelPos.value.y + deltaY))
+  };
+};
+
+const stopDrag = () => {
+  isDragging.value = false;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+};
+
+const startResize = (direction, e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  isResizing.value = true;
+  resizeDirection.value = direction;
+  initialMousePos.value = { x: e.clientX, y: e.clientY };
+  initialPanelPos.value = { ...panelPosition.value };
+  initialPanelSize.value = { ...panelSize.value };
+  
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+};
+
+const onResize = (e) => {
+  if (!isResizing.value) return;
+  
+  const deltaX = e.clientX - initialMousePos.value.x;
+  const deltaY = e.clientY - initialMousePos.value.y;
+  
+  const minWidth = 250;
+  const minHeight = 300;
+  const maxWidth = window.innerWidth - panelPosition.value.x;
+  const maxHeight = window.innerHeight - panelPosition.value.y;
+  
+  switch (resizeDirection.value) {
+    case 'se': // 右下角
+      panelSize.value.width = Math.max(minWidth, Math.min(maxWidth, initialPanelSize.value.width + deltaX));
+      panelSize.value.height = Math.max(minHeight, Math.min(maxHeight, initialPanelSize.value.height + deltaY));
+      break;
+    case 'sw': // 左下角
+      const newWidth = initialPanelSize.value.width - deltaX;
+      if (newWidth >= minWidth) {
+        panelSize.value.width = newWidth;
+        panelPosition.value.x = initialPanelPos.value.x + deltaX;
+      }
+      panelSize.value.height = Math.max(minHeight, Math.min(maxHeight, initialPanelSize.value.height + deltaY));
+      break;
+    case 'ne': // 右上角
+      panelSize.value.width = Math.max(minWidth, Math.min(maxWidth, initialPanelSize.value.width + deltaX));
+      const newHeight = initialPanelSize.value.height - deltaY;
+      if (newHeight >= minHeight) {
+        panelSize.value.height = newHeight;
+        panelPosition.value.y = initialPanelPos.value.y + deltaY;
+      }
+      break;
+    case 'nw': // 左上角
+      const newWidthNW = initialPanelSize.value.width - deltaX;
+      const newHeightNW = initialPanelSize.value.height - deltaY;
+      if (newWidthNW >= minWidth) {
+        panelSize.value.width = newWidthNW;
+        panelPosition.value.x = initialPanelPos.value.x + deltaX;
+      }
+      if (newHeightNW >= minHeight) {
+        panelSize.value.height = newHeightNW;
+        panelPosition.value.y = initialPanelPos.value.y + deltaY;
+      }
+      break;
+    case 'n': // 上边
+      const newHeightN = initialPanelSize.value.height - deltaY;
+      if (newHeightN >= minHeight) {
+        panelSize.value.height = newHeightN;
+        panelPosition.value.y = initialPanelPos.value.y + deltaY;
+      }
+      break;
+    case 's': // 下边
+      panelSize.value.height = Math.max(minHeight, Math.min(maxHeight, initialPanelSize.value.height + deltaY));
+      break;
+    case 'w': // 左边
+      const newWidthW = initialPanelSize.value.width - deltaX;
+      if (newWidthW >= minWidth) {
+        panelSize.value.width = newWidthW;
+        panelPosition.value.x = initialPanelPos.value.x + deltaX;
+      }
+      break;
+    case 'e': // 右边
+      panelSize.value.width = Math.max(minWidth, Math.min(maxWidth, initialPanelSize.value.width + deltaX));
+      break;
+  }
+};
+
+const stopResize = () => {
+  isResizing.value = false;
+  resizeDirection.value = '';
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
 };
 
 // 格式化日期
@@ -1205,17 +1575,147 @@ onUnmounted(() => {
 }
 
 .plan-details {
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  background: white;
+  overflow: hidden;
+  resize: none;
+}
+
+.panel-header {
+  background: linear-gradient(135deg, #409eff, #67c23a);
+  color: white;
+  padding: 8px 12px;
+  cursor: grab;
+  user-select: none;
+  position: relative;
+}
+
+.panel-header:active {
+  cursor: grabbing;
+}
+
+.drag-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.drag-indicator span:first-child {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* 缩放手柄样式 */
+.resize-handles {
   position: absolute;
-  top: 80px;
-  right: 20px;
-  width: 300px;
-  max-height: calc(100vh - 200px);
-  overflow-y: auto;
-  z-index: 1000;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.resize-handle {
+  position: absolute;
+  pointer-events: all;
+  background: rgba(64, 158, 255, 0.3);
+  border: 1px solid rgba(64, 158, 255, 0.6);
+  transition: all 0.2s ease;
+}
+
+.resize-handle:hover {
+  background: rgba(64, 158, 255, 0.5);
+  border-color: #409eff;
+}
+
+/* 角落手柄 */
+.resize-handle-nw {
+  top: -5px;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
+  border-radius: 2px 0 2px 0;
+}
+
+.resize-handle-ne {
+  top: -5px;
+  right: -5px;
+  width: 12px;
+  height: 12px;
+  cursor: ne-resize;
+  border-radius: 0 2px 0 2px;
+}
+
+.resize-handle-sw {
+  bottom: -5px;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  cursor: sw-resize;
+  border-radius: 0 2px 0 2px;
+}
+
+.resize-handle-se {
+  bottom: -5px;
+  right: -5px;
+  width: 12px;
+  height: 12px;
+  cursor: se-resize;
+  border-radius: 2px 0 2px 0;
+}
+
+/* 边缘手柄 - 扩展到整个面板边缘 */
+.resize-handle-n {
+  top: -4px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  cursor: n-resize;
+  border-radius: 0 0 4px 4px;
+}
+
+.resize-handle-s {
+  bottom: -4px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  cursor: s-resize;
+  border-radius: 4px 4px 0 0;
+}
+
+.resize-handle-w {
+  left: -4px;
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  cursor: w-resize;
+  border-radius: 0 4px 4px 0;
+}
+
+.resize-handle-e {
+  right: -4px;
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  cursor: e-resize;
+  border-radius: 4px 0 0 4px;
 }
 
 .detail-card {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
+  border: none;
+  height: calc(100% - 40px);
+  overflow-y: auto;
+}
+
+.detail-card .el-card__body {
+  padding: 0;
+  height: 100%;
 }
 
 .card-header {
@@ -1225,8 +1725,245 @@ onUnmounted(() => {
 }
 
 .plan-content {
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: none; /* 移除高度限制 */
+  overflow-y: visible; /* 允许内容完全显示 */
+}
+
+/* 新增的计划展示样式 */
+.itinerary-container {
+  padding: 10px 0;
+}
+
+.display-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  transition: all 0.3s ease;
+}
+
+.day-header:hover {
+  background: #e0f2fe;
+}
+
+.day-summary {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: 14px;
+  color: #666;
+}
+
+.activity-count, .daily-cost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.expand-icon {
+  transition: transform 0.3s ease;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.day-content {
+  padding: 0 12px 20px;
+}
+
+/* 简洁视图样式 */
+.activities-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-item-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #409eff;
+}
+
+.activity-time {
+  font-weight: 600;
+  color: #409eff;
+  min-width: 60px;
+}
+
+.activity-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.activity-name {
+  font-weight: 500;
+}
+
+/* 详细视图样式 */
+.activities-detailed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.activity-item-detailed {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e4e7ed;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.activity-header {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.activity-time-detailed {
+  font-weight: 600;
+  color: #409eff;
+  font-size: 16px;
+  min-width: 80px;
+}
+
+.activity-main {
+  flex: 1;
+}
+
+.activity-name-detailed {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.duration, .cost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #666;
+}
+
+.activity-description {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  color: #666;
+  line-height: 1.6;
+}
+
+.activity-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #909399;
+  font-size: 14px;
+}
+
+/* 餐饮和住宿信息样式 */
+.day-meals, .day-accommodation {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 6px;
+}
+
+.day-meals h6, .day-accommodation h6 {
+  margin: 0 0 8px 0;
+  color: #409eff;
+  font-size: 14px;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meal-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meal-restaurant {
+  flex: 1;
+  font-weight: 500;
+}
+
+.meal-cost, .hotel-cost {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+.accommodation-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hotel-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+/* 旅行贴士样式 */
+.travel-tips {
+  margin-top: 24px;
+  padding: 16px;
+  background: #fff7e6;
+  border-radius: 8px;
+  border-left: 4px solid #e6a23c;
+}
+
+.travel-tips h5 {
+  margin: 0 0 12px 0;
+  color: #e6a23c;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tips-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tips-list li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+  color: #666;
 }
 
 .day-item {
@@ -1301,6 +2038,59 @@ onUnmounted(() => {
     position: static;
     width: 100%;
     margin-top: 20px;
+  }
+
+  /* 移动端计划展示优化 */
+  .display-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .day-header {
+    padding: 10px;
+  }
+
+  .day-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .activity-item-compact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .activity-time {
+    min-width: auto;
+  }
+
+  .activity-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .activity-time-detailed {
+    min-width: auto;
+    font-size: 14px;
+  }
+
+  .activity-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .accommodation-info, .meal-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .plan-content {
+    padding: 10px;
   }
 }
 
