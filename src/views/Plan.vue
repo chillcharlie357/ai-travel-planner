@@ -352,6 +352,7 @@
                             <div
                               class="activity-item-compact draggable-item"
                               :key="actIndex"
+                              @click="onActivityClick(activity)"
                             >
                               <div class="drag-handle">⋮⋮</div>
                               <div class="activity-time">{{ activity.time }}</div>
@@ -377,6 +378,7 @@
                             <div
                               class="activity-item-detailed draggable-item"
                               :key="actIndex"
+                              @click="onActivityClick(activity)"
                             >
                               <div class="drag-handle">⋮⋮</div>
                               <div class="activity-content">
@@ -1163,6 +1165,25 @@ const onActivityDragChange = (evt) => {
   if (evt.moved || evt.added || evt.removed) {
     // 触发计划更新
     ElMessage.success('活动顺序已更新');
+  }
+};
+
+// 活动点击事件处理
+const onActivityClick = (activity) => {
+  console.log('[Plan] 点击活动:', activity.name);
+  
+  if (!activity || !activity.coordinates) {
+    ElMessage.warning('该活动没有位置信息，无法在地图上显示');
+    return;
+  }
+
+  // 调用地图组件的跳转方法
+  if (mapRef.value && mapRef.value.jumpToActivity) {
+    mapRef.value.jumpToActivity(activity);
+    ElMessage.success(`正在跳转到 ${activity.name}`);
+  } else {
+    console.warn('[Plan] 地图组件未准备就绪或方法不存在');
+    ElMessage.warning('地图未准备就绪，请稍后再试');
   }
 };
 

@@ -200,22 +200,104 @@ const updateLeafletMarkers = async () => {
           emit('markerClick', markerData, index)
         })
 
+        // 获取活动类型对应的CSS类名
+        const getActivityTypeClass = (type) => {
+          const typeMap = {
+            '景点': 'type-attraction',
+            '餐厅': 'type-restaurant', 
+            '酒店': 'type-hotel',
+            '交通': 'type-transport',
+            '购物': 'type-shopping',
+            '娱乐': 'type-entertainment',
+            '文化': 'type-culture',
+            '自然': 'type-nature',
+            '运动': 'type-sports',
+            '其他': 'type-other'
+          }
+          return typeMap[type] || 'type-default'
+        }
+
         // 添加鼠标悬浮事件显示活动详情
         if (markerData.activity) {
           const activity = markerData.activity
+          
+          // 构建更详细的弹窗内容
           const popupContent = `
             <div class="activity-popup">
-              <h4>${activity.name || '未知活动'}</h4>
-              <p><strong>时间:</strong> ${activity.time || '未知时间'}</p>
-              <p><strong>类型:</strong> ${activity.type || '未知类型'}</p>
-              ${activity.description ? `<p><strong>描述:</strong> ${activity.description}</p>` : ''}
-              ${activity.location ? `<p><strong>地点:</strong> ${activity.location}</p>` : ''}
-              ${activity.estimatedCost ? `<p><strong>预估费用:</strong> ¥${activity.estimatedCost}</p>` : ''}
-              ${activity.duration ? `<p><strong>建议游玩时长:</strong> ${activity.duration}</p>` : ''}
+              <div class="popup-header">
+                <h4 class="activity-title">${activity.name || '未知活动'}</h4>
+                <div class="activity-type-badge">
+                  <span class="type-tag ${getActivityTypeClass(activity.type)}">${activity.type || '未知类型'}</span>
+                </div>
+              </div>
+              
+              <div class="popup-content">
+                <div class="info-row">
+                  <div class="info-item">
+                    <i class="icon-time">🕐</i>
+                    <span class="label">时间:</span>
+                    <span class="value">${activity.time || '未知时间'}</span>
+                  </div>
+                  ${activity.duration ? `
+                    <div class="info-item">
+                      <i class="icon-duration">⏱️</i>
+                      <span class="label">时长:</span>
+                      <span class="value">${activity.duration}</span>
+                    </div>
+                  ` : ''}
+                </div>
+                
+                ${activity.location ? `
+                  <div class="info-row">
+                    <div class="info-item full-width">
+                      <i class="icon-location">📍</i>
+                      <span class="label">地点:</span>
+                      <span class="value location-text">${activity.location}</span>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                ${activity.description ? `
+                  <div class="info-row">
+                    <div class="info-item full-width">
+                      <i class="icon-desc">📝</i>
+                      <span class="label">描述:</span>
+                      <div class="description-text">${activity.description}</div>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                ${activity.estimatedCost ? `
+                  <div class="info-row cost-row">
+                    <div class="info-item">
+                      <i class="icon-cost">💰</i>
+                      <span class="label">预估费用:</span>
+                      <span class="value cost-value">¥${activity.estimatedCost}</span>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                ${activity.coordinates ? `
+                  <div class="info-row coordinates-row">
+                    <div class="info-item full-width">
+                      <i class="icon-coordinates">🗺️</i>
+                      <span class="label">坐标:</span>
+                      <span class="value coordinates-text">${Array.isArray(activity.coordinates) ? activity.coordinates.join(', ') : activity.coordinates}</span>
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+              
+              <div class="popup-footer">
+                <small class="tip-text">💡 点击标记点查看更多操作</small>
+              </div>
             </div>
           `
           
-          markerInstance.bindPopup(popupContent)
+          markerInstance.bindPopup(popupContent, {
+            maxWidth: 320,
+            className: 'custom-popup'
+          })
           
           // 鼠标悬浮显示弹窗
           markerInstance.on('mouseover', function() {
@@ -473,6 +555,88 @@ onUnmounted(() => {
   }
 })
 
+// 跳转到指定活动位置
+const jumpToActivity = (activity) => {
+  if (!map || !activity || !activity.coordinates) {
+    console.warn('[Map] 无法跳转：地图未初始化或活动坐标无效', { map: !!map, activity })
+    return
+  }
+
+  try {
+    let lng, lat
+    const coords = activity.coordinates
+
+    // 解析坐标格式
+    if (Array.isArray(coords) && coords.length >= 2) {
+      lng = parseFloat(coords[0])
+      lat = parseFloat(coords[1])
+    } else if (coords && typeof coords === 'object') {
+      lng = parseFloat(coords.lng ?? coords.longitude)
+      lat = parseFloat(coords.lat ?? coords.latitude)
+    } else if (typeof coords === 'string') {
+      const parts = coords.split(',')
+      if (parts.length >= 2) {
+        lng = parseFloat(parts[0].trim())
+        lat = parseFloat(parts[1].trim())
+      }
+    }
+
+    // 验证坐标有效性
+    if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+      // 跳转到指定位置，使用适当的缩放级别
+      map.setView([lat, lng], 15, {
+        animate: true,
+        duration: 1.0
+      })
+      
+      console.log('[Map] 跳转到活动位置:', activity.name, [lng, lat])
+      
+      // 找到对应的标记点并高亮显示
+      highlightActivityMarker(activity)
+    } else {
+      console.warn('[Map] 无效的活动坐标:', coords, { lng, lat })
+    }
+  } catch (error) {
+    console.error('[Map] 跳转到活动位置失败:', error)
+  }
+}
+
+// 高亮显示指定活动的标记点
+const highlightActivityMarker = (activity) => {
+  if (!map || !activity) return
+
+  // 找到对应的标记点
+  const markerIndex = props.markers.findIndex(marker => 
+    marker.activity && marker.activity.name === activity.name
+  )
+
+  if (markerIndex >= 0 && markerInstances[markerIndex]) {
+    const marker = markerInstances[markerIndex]
+    
+    // 打开弹窗显示活动详情
+    marker.openPopup()
+    
+    // 添加临时高亮效果
+    const markerElement = marker.getElement()
+    if (markerElement) {
+      const customMarker = markerElement.querySelector('.custom-marker')
+      if (customMarker) {
+        // 添加高亮样式
+        customMarker.style.background = '#F56C6C'
+        customMarker.style.transform = 'scale(1.3)'
+        customMarker.style.boxShadow = '0 8px 20px rgba(245, 108, 108, 0.6)'
+        
+        // 2秒后恢复原样
+        setTimeout(() => {
+          customMarker.style.background = '#409eff'
+          customMarker.style.transform = 'scale(1)'
+          customMarker.style.boxShadow = '0 4px 12px rgba(64, 158, 255, 0.4)'
+        }, 2000)
+      }
+    }
+  }
+}
+
 // 暴露地图实例给父组件
 defineExpose({
   getMap: () => map,
@@ -492,7 +656,8 @@ defineExpose({
   addMarker: (markerData) => {
     const newMarkers = [...props.markers, markerData]
     emit('update:markers', newMarkers)
-  }
+  },
+  jumpToActivity: jumpToActivity
 })
 </script>
 
@@ -519,6 +684,207 @@ defineExpose({
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
+}
+</style>
+
+<style>
+/* 全局样式，用于Leaflet弹窗 */
+.custom-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  border: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.activity-popup {
+  min-width: 280px;
+  max-width: 320px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.popup-header {
+  padding: 16px 20px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.activity-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.activity-type-badge {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.type-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* 不同活动类型的颜色 */
+.type-attraction { background: rgba(255, 107, 107, 0.8); }
+.type-restaurant { background: rgba(255, 193, 7, 0.8); }
+.type-hotel { background: rgba(76, 175, 80, 0.8); }
+.type-transport { background: rgba(33, 150, 243, 0.8); }
+.type-shopping { background: rgba(156, 39, 176, 0.8); }
+.type-entertainment { background: rgba(255, 152, 0, 0.8); }
+.type-culture { background: rgba(121, 85, 72, 0.8); }
+.type-nature { background: rgba(76, 175, 80, 0.8); }
+.type-sports { background: rgba(244, 67, 54, 0.8); }
+.type-default { background: rgba(158, 158, 158, 0.8); }
+
+.popup-content {
+  padding: 16px 20px;
+}
+
+.info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.info-item.full-width {
+  flex: 1 1 100%;
+}
+
+.info-item i {
+  font-size: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.info-item .label {
+  font-weight: 500;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
+}
+
+.info-item .value {
+  font-size: 13px;
+  color: white;
+  word-break: break-word;
+}
+
+.location-text {
+  font-weight: 500;
+}
+
+.description-text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.95);
+  margin-top: 4px;
+}
+
+.cost-row {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 8px -8px 12px;
+}
+
+.cost-value {
+  font-weight: 600;
+  color: #4CAF50;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: #2E7D32;
+}
+
+.coordinates-row {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 8px -8px 0;
+}
+
+.coordinates-text {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.popup-footer {
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.tip-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+/* 弹窗箭头样式 */
+.custom-popup .leaflet-popup-tip {
+  background: #764ba2;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 关闭按钮样式 */
+.custom-popup .leaflet-popup-close-button {
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 8px;
+  right: 8px;
+  transition: all 0.2s ease;
+}
+
+.custom-popup .leaflet-popup-close-button:hover {
+  background: rgba(0, 0, 0, 0.4);
+  transform: scale(1.1);
 }
 </style>
 
