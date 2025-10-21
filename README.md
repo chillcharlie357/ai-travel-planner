@@ -92,47 +92,42 @@ scripts/                # 部署脚本
 
 ## Docker 部署
 
+### 推荐部署方式
+
+推荐直接从阿里云镜像仓库拉取预构建的镜像进行部署，无需本地构建。
+
+**镜像仓库地址**: `registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest`
+
 ### 快速部署
 
-**Windows 用户：**
-```cmd
-scripts\deploy.bat deploy
-```
-
-**Linux/macOS 用户：**
-```bash
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh deploy
-```
-
-### 手动部署
-
-1. **准备环境变量文件**
-   ```bash
-   cp .env.docker .env.docker.local
-   ```
+1. **准备环境变量**
    
-   编辑 `.env.docker.local` 并填入实际配置：
+   创建 `.env.docker` 文件并配置环境变量：
    ```bash
    # LLM API 配置
-   VITE_LLM_API_URL=https://api.openai.com/v1
-   VITE_LLM_API_KEY=your-actual-api-key
-   VITE_LLM_MODEL=gpt-3.5-turbo
+   VITE_OPENAI_API_KEY=your-openai-api-key
+   VITE_OPENAI_BASE_URL=https://api.openai.com/v1
    
    # Supabase 配置
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-actual-anon-key
+   VITE_SUPABASE_URL=your-supabase-url
+   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+   
+   # 应用配置
+   VITE_APP_TITLE=AI Travel Planner
+   VITE_APP_VERSION=1.0.0
    ```
 
-2. **拉取并启动镜像**
+2. **拉取并运行镜像**
    ```bash
    # 拉取最新镜像
    docker pull registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
    
    # 运行容器
-   docker run -d -p 80:80 \
-     --env-file .env.docker.local \
+   docker run -d \
      --name ai-travel-planner \
+     --env-file .env.docker \
+     -p 80:80 \
+     --restart unless-stopped \
      registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
    ```
 
@@ -140,23 +135,72 @@ chmod +x scripts/deploy.sh
    
    打开浏览器访问 `http://localhost`
 
-### 本地构建部署
+### 使用环境变量直接部署
 
-如果需要本地构建镜像：
+如果不想使用环境变量文件，也可以直接在命令行中传入环境变量：
+
 ```bash
-# 构建镜像
-docker build -t ai-travel-planner .
-
-# 运行容器
-docker run -d -p 80:80 \
-  -e VITE_LLM_API_URL="your-llm-api-url" \
-  -e VITE_LLM_API_KEY="your-llm-api-key" \
-  -e VITE_LLM_MODEL="your-llm-model" \
+docker run -d \
+  --name ai-travel-planner \
+  -p 80:80 \
+  -e VITE_OPENAI_API_KEY="your-openai-api-key" \
+  -e VITE_OPENAI_BASE_URL="https://api.openai.com/v1" \
   -e VITE_SUPABASE_URL="your-supabase-url" \
   -e VITE_SUPABASE_ANON_KEY="your-supabase-anon-key" \
+  --restart unless-stopped \
+  registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
+```
+
+
+
+### 本地构建部署（可选）
+
+如果需要本地构建镜像，可以使用以下两种方式：
+
+#### 方式一：构建时传入环境变量
+```bash
+# 构建镜像时传入环境变量
+docker build \
+  --build-arg VITE_OPENAI_API_KEY="your-openai-api-key" \
+  --build-arg VITE_OPENAI_BASE_URL="https://api.openai.com/v1" \
+  --build-arg VITE_SUPABASE_URL="your-supabase-url" \
+  --build-arg VITE_SUPABASE_ANON_KEY="your-supabase-anon-key" \
+  -t ai-travel-planner .
+
+# 运行容器
+docker run -d \
   --name ai-travel-planner \
+  -p 80:80 \
+  --restart unless-stopped \
   ai-travel-planner:latest
 ```
+
+#### 方式二：运行时传入环境变量
+```bash
+# 构建镜像（不传入环境变量）
+docker build -t ai-travel-planner .
+
+# 运行容器时传入环境变量
+docker run -d \
+  --name ai-travel-planner \
+  --env-file .env.docker \
+  -p 80:80 \
+  --restart unless-stopped \
+  ai-travel-planner:latest
+
+# 或者直接传入环境变量
+docker run -d \
+  --name ai-travel-planner \
+  -p 80:80 \
+  -e VITE_OPENAI_API_KEY="your-openai-api-key" \
+  -e VITE_OPENAI_BASE_URL="https://api.openai.com/v1" \
+  -e VITE_SUPABASE_URL="your-supabase-url" \
+  -e VITE_SUPABASE_ANON_KEY="your-supabase-anon-key" \
+  --restart unless-stopped \
+  ai-travel-planner:latest
+```
+
+> **注意**：方式一在构建时将环境变量编译到静态文件中，更安全但不够灵活；方式二支持运行时动态配置，更灵活但需要确保环境变量的安全性。
 
 ## CI/CD 自动化部署
 
@@ -182,14 +226,29 @@ docker run -d -p 80:80 \
 
 ### 镜像拉取和部署
 
+推荐直接从阿里云镜像仓库拉取预构建的镜像：
+
 ```bash
 # 拉取最新镜像
 docker pull registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
 
-# 运行容器
-docker run -d -p 80:80 \
-  --env-file .env.docker.local \
+# 使用环境变量文件运行容器
+docker run -d \
   --name ai-travel-planner \
+  --env-file .env.docker \
+  -p 80:80 \
+  --restart unless-stopped \
+  registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
+
+# 或者直接传入环境变量
+docker run -d \
+  --name ai-travel-planner \
+  -p 80:80 \
+  -e VITE_OPENAI_API_KEY="your-openai-api-key" \
+  -e VITE_OPENAI_BASE_URL="https://api.openai.com/v1" \
+  -e VITE_SUPABASE_URL="your-supabase-url" \
+  -e VITE_SUPABASE_ANON_KEY="your-supabase-anon-key" \
+  --restart unless-stopped \
   registry.cn-hangzhou.aliyuncs.com/mydocker_he/ai-travel-planner:latest
 ```
 
