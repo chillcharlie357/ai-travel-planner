@@ -121,16 +121,6 @@
               <el-form :model="preferencesForm" label-width="120px">
                 <el-row :gutter="20">
                   <el-col :span="12">
-                    <el-form-item label="预算范围">
-                      <el-select v-model="preferencesForm.budgetRange" style="width: 100%">
-                        <el-option label="经济型 (< ¥3000)" value="budget" />
-                        <el-option label="舒适型 (¥3000-8000)" value="comfort" />
-                        <el-option label="豪华型 (¥8000-20000)" value="luxury" />
-                        <el-option label="奢华型 (> ¥20000)" value="premium" />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="12">
                     <el-form-item label="住宿偏好">
                       <el-select v-model="preferencesForm.accommodation" style="width: 100%">
                         <el-option label="青年旅社" value="hostel" />
@@ -140,6 +130,8 @@
                         <el-option label="民宿/公寓" value="apartment" />
                       </el-select>
                     </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
                   </el-col>
                 </el-row>
                 
@@ -220,7 +212,6 @@
                       <p>{{ trip.description }}</p>
                       <div class="trip-meta">
                         <el-tag size="small">{{ trip.duration }}天</el-tag>
-                        <el-tag size="small" type="success">¥{{ trip.budget.toLocaleString() }}</el-tag>
                         <el-tag size="small" type="info">{{ trip.companions }}人</el-tag>
                       </div>
                     </div>
@@ -274,7 +265,6 @@ const profileForm = reactive({
 })
 
 const preferencesForm = reactive({
-  budgetRange: 'comfort',
   accommodation: 'business_hotel',
   transportation: ['飞机', '高铁'],
   travelTypes: ['文化历史', '美食体验'],
@@ -288,7 +278,6 @@ const travelHistory = ref([
     description: '樱花季的东京之旅，体验了传统文化和现代都市的完美融合',
     date: '2024-03-15',
     duration: 7,
-    budget: 12000,
     companions: 2
   },
   {
@@ -297,7 +286,6 @@ const travelHistory = ref([
     description: '海岛度假，享受阳光沙滩和美味海鲜',
     date: '2023-12-20',
     duration: 5,
-    budget: 8000,
     companions: 4
   },
   {
@@ -306,7 +294,6 @@ const travelHistory = ref([
     description: '浪漫之都，参观了卢浮宫、埃菲尔铁塔等著名景点',
     date: '2023-09-10',
     duration: 8,
-    budget: 18000,
     companions: 2
   }
 ])

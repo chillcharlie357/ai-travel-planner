@@ -39,7 +39,7 @@
                   v-model="inputText"
                   type="textarea"
                   :rows="4"
-                  placeholder="例如：我想去日本，5天，预算1万元，喜欢美食和动漫，带孩子"
+                  placeholder="例如：我想去日本，5天，喜欢美食和动漫，带孩子"
                   class="input-textarea"
                 />
 
@@ -119,7 +119,7 @@
                   >
                     <div class="history-title">{{ plan.destination }}</div>
                     <div class="history-info">
-                      {{ plan.days }}天 · {{ plan.budget }}
+                      {{ plan.days }}天
                     </div>
                     <el-tag size="small" type="warning">临时</el-tag>
                   </div>
@@ -164,7 +164,7 @@
                       {{ plan.destination }}
                     </div>
                     <div class="history-info">
-                      {{ plan.days }}天 · ¥{{ plan.budget?.toLocaleString() }} ·
+                      {{ plan.days }}天 ·
                       {{ plan.people }}人
                     </div>
                     <div class="history-date">
@@ -328,9 +328,6 @@
                       <span v-if="day.activities" class="activity-count">
                         {{ day.activities.length }}个活动
                       </span>
-                      <span v-if="day.dailyTotal" class="daily-cost">
-                        预算: ¥{{ day.dailyTotal }}
-                      </span>
                       <el-icon class="expand-icon" :class="{ 'expanded': expandedDays.includes(index) }">
                         <ArrowDown />
                       </el-icon>
@@ -394,10 +391,6 @@
                                         <el-icon><Clock /></el-icon>
                                         {{ activity.duration }}
                                       </span>
-                                      <span v-if="activity.estimatedCost" class="cost">
-                                        <el-icon><Money /></el-icon>
-                                        ¥{{ activity.estimatedCost }}
-                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -426,7 +419,6 @@
                             >
                               <el-tag size="small" type="success">{{ meal.type }}</el-tag>
                               <span class="meal-restaurant">{{ meal.restaurant }}</span>
-                              <span v-if="meal.estimatedCost" class="meal-cost">¥{{ meal.estimatedCost }}</span>
                             </div>
                           </div>
                         </div>
@@ -437,9 +429,6 @@
                           <div class="accommodation-info">
                             <span class="hotel-name">{{ day.accommodation.name }}</span>
                             <el-tag size="small" type="info">{{ day.accommodation.type }}</el-tag>
-                            <span v-if="day.accommodation.estimatedCost" class="hotel-cost">
-                              ¥{{ day.accommodation.estimatedCost }}/晚
-                            </span>
                           </div>
                         </div>
                       </div>
@@ -773,8 +762,6 @@ const generatePlan = async () => {
       summary: "AI正在为您制定个性化的旅行计划，请稍候...",
       destination: "分析中...",
       days: 0,
-      budget: 0,
-      totalBudget: 0,
       itinerary: [],
       tips: [],
       createdAt: new Date().toISOString(),
@@ -880,7 +867,6 @@ const parsePlanInput = (input) => {
   return {
     destination: "", // 不在前端识别，交由 LLM 从原文提取
     days: extractDays(trimmed),
-    budget: extractBudget(trimmed),
     people: extractTravelers(trimmed), // 与 llm.js 的提示词对齐
     travelers: extractTravelers(trimmed), // 保留兼容字段
     preferences: extractPreferences(trimmed),
@@ -926,14 +912,7 @@ const extractDays = (input) => {
   return dayMatch ? parseInt(dayMatch[1]) : 5;
 };
 
-const extractBudget = (input) => {
-  const budgetMatch = input.match(/(\d+)\s*[万元]/);
-  if (budgetMatch) {
-    const amount = parseInt(budgetMatch[1]);
-    return input.includes("万") ? amount * 10000 : amount;
-  }
-  return 10000;
-};
+
 
 const extractTravelers = (input) => {
   const travelerMatch = input.match(/(\d+)\s*人/);
@@ -1888,7 +1867,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.duration, .cost {
+.duration {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1943,11 +1922,6 @@ onUnmounted(() => {
 .meal-restaurant {
   flex: 1;
   font-weight: 500;
-}
-
-.meal-cost, .hotel-cost {
-  color: #f56c6c;
-  font-weight: 600;
 }
 
 .accommodation-info {

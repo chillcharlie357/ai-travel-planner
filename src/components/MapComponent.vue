@@ -267,16 +267,6 @@ const updateLeafletMarkers = async () => {
                   </div>
                 ` : ''}
                 
-                ${activity.estimatedCost ? `
-                  <div class="info-row cost-row">
-                    <div class="info-item">
-                      <i class="icon-cost">💰</i>
-                      <span class="label">预估费用:</span>
-                      <span class="value cost-value">¥${activity.estimatedCost}</span>
-                    </div>
-                  </div>
-                ` : ''}
-                
                 ${activity.coordinates ? `
                   <div class="info-row coordinates-row">
                     <div class="info-item full-width">
@@ -811,22 +801,6 @@ defineExpose({
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.95);
   margin-top: 4px;
-}
-
-.cost-row {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin: 8px -8px 12px;
-}
-
-.cost-value {
-  font-weight: 600;
-  color: #4CAF50;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 2px 8px;
-  border-radius: 12px;
-  color: #2E7D32;
 }
 
 .coordinates-row {

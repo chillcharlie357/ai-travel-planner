@@ -330,92 +330,6 @@ export const travelPlanService = {
 }
 
 /**
- * 费用记录服务
- */
-export const expenseService = {
-  /**
-   * 创建费用记录
-   * @param {Object} expense - 费用记录
-   */
-  async createExpense(expense) {
-    try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .insert({
-          ...expense,
-          created_at: new Date().toISOString()
-        })
-        .select()
-
-      if (error) throw error
-      return data[0]
-    } catch (error) {
-      console.error('创建费用记录失败:', error)
-      throw new Error(error.message || '创建费用记录失败')
-    }
-  },
-
-  /**
-   * 获取旅行计划的费用记录
-   * @param {string} planId - 计划ID
-   */
-  async getPlanExpenses(planId) {
-    try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('plan_id', planId)
-        .order('date', { ascending: false })
-
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('获取费用记录失败:', error)
-      throw new Error(error.message || '获取费用记录失败')
-    }
-  },
-
-  /**
-   * 更新费用记录
-   * @param {string} expenseId - 费用记录ID
-   * @param {Object} updates - 更新内容
-   */
-  async updateExpense(expenseId, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .update(updates)
-        .eq('id', expenseId)
-        .select()
-
-      if (error) throw error
-      return data[0]
-    } catch (error) {
-      console.error('更新费用记录失败:', error)
-      throw new Error(error.message || '更新费用记录失败')
-    }
-  },
-
-  /**
-   * 删除费用记录
-   * @param {string} expenseId - 费用记录ID
-   */
-  async deleteExpense(expenseId) {
-    try {
-      const { error } = await supabase
-        .from('expenses')
-        .delete()
-        .eq('id', expenseId)
-
-      if (error) throw error
-    } catch (error) {
-      console.error('删除费用记录失败:', error)
-      throw new Error(error.message || '删除费用记录失败')
-    }
-  }
-}
-
-/**
  * 收藏服务
  */
 export const favoriteService = {
@@ -512,23 +426,6 @@ export const realtimeService = {
         schema: 'public',
         table: 'travel_plans',
         filter: `id=eq.${planId}`
-      }, callback)
-      .subscribe()
-  },
-
-  /**
-   * 订阅费用记录变化
-   * @param {string} planId - 计划ID
-   * @param {Function} callback - 回调函数
-   */
-  subscribeToExpenses(planId, callback) {
-    return supabase
-      .channel(`expenses_${planId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'expenses',
-        filter: `plan_id=eq.${planId}`
       }, callback)
       .subscribe()
   },

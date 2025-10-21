@@ -36,13 +36,11 @@ export const useTravelStore = defineStore('travel', () => {
         destination: plan.destination || '未知目的地',
         summary: plan.summary || '',
         days: plan.days || 1,
-        budget: plan.budget || plan.totalCost || 0,
         people: plan.people || 1,
         preferences: plan.preferences || '',
         start_date: plan.startDate || null,
         plan_data: {
           itinerary: plan.itinerary || [],
-          totalCost: plan.totalCost || plan.budget || 0,
           createdAt: plan.createdAt || new Date().toISOString(),
           input: plan.input || ''
         }
@@ -107,8 +105,6 @@ export const useTravelStore = defineStore('travel', () => {
       destination: plan.destination,
       summary: plan.summary,
       days: plan.days,
-      budget: plan.budget,
-      totalCost: plan.plan_data?.totalCost || plan.budget,
       people: plan.people,
       preferences: plan.preferences,
       startDate: plan.start_date,

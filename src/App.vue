@@ -18,7 +18,6 @@
             >
               <el-menu-item index="/">首页</el-menu-item>
               <el-menu-item index="/plan">规划行程</el-menu-item>
-              <el-menu-item index="/budget">预算管理</el-menu-item>
               <el-menu-item index="/profile">个人中心</el-menu-item>
             </el-menu>
             

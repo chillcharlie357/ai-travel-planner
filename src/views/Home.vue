@@ -66,13 +66,6 @@
           </div>
           <div class="feature-card">
             <div class="feature-icon">
-              <el-icon><Money /></el-icon>
-            </div>
-            <h3>预算管理</h3>
-            <p>智能分析旅行费用，合理分配预算，让每一分钱都花在刀刃上</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
               <el-icon><Upload /></el-icon>
             </div>
             <h3>云端同步</h3>
@@ -101,7 +94,7 @@
           
           <div class="testimonial-card">
             <div class="testimonial-content">
-              <p>"预算管理功能太棒了！帮我合理规划了欧洲15天的行程费用，每一笔开销都清清楚楚。"</p>
+              <p>"智能规划功能太棒了！帮我合理安排了欧洲15天的行程路线，每个景点都安排得恰到好处。"</p>
             </div>
             <div class="testimonial-author">
               <el-avatar :size="50" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">李</el-avatar>
