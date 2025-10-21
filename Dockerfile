@@ -25,11 +25,20 @@ FROM nginx:alpine AS production
 # 复制自定义 nginx 配置
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# 复制 Docker 启动脚本
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+# 设置脚本执行权限
+RUN chmod +x /docker-entrypoint.sh
+
 # 从构建阶段复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 暴露端口
 EXPOSE 80
 
-# 启动 nginx
+# 使用自定义启动脚本
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# 默认命令
 CMD ["nginx", "-g", "daemon off;"]
