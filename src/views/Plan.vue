@@ -13,45 +13,25 @@
           <!-- 生成计划 Tab -->
           <el-tab-pane label="生成计划" name="generate">
             <div class="generate-section">
-              <!-- 语音输入 -->
-              <div class="voice-input">
-                <el-button
-                  :type="isRecording ? 'danger' : 'primary'"
-                  :loading="isRecording"
-                  size="large"
-                  circle
-                  @click="toggleRecording"
-                  class="voice-btn"
-                >
-                  <el-icon v-if="!isRecording"><Microphone /></el-icon>
-                  <el-icon v-else><VideoPause /></el-icon>
-                </el-button>
-                <p class="voice-tip">
-                  {{
-                    isRecording ? "正在录音中，点击停止" : "点击开始语音输入"
-                  }}
-                </p>
-              </div>
-
               <!-- 文字输入 -->
               <div class="text-input">
-                <el-input
-                  v-model="inputText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="例如：我想去日本，5天，喜欢美食和动漫，带孩子"
-                  class="input-textarea"
-                />
-
-                <!-- 语音输入显示 -->
-                <div v-if="voiceText" class="voice-text">
-                  <el-alert
-                    :title="`语音识别: ${voiceText}`"
-                    type="info"
-                    :closable="false"
-                    show-icon
+                <div class="input-container">
+                  <el-input
+                    v-model="inputText"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="例如：我想去日本，5天，喜欢美食和动漫，带孩子"
+                    class="input-textarea"
                   />
+                  
+                  <!-- 语音输入组件 -->
+                  <div class="voice-input-container">
+                    <VoiceInput 
+                      @voiceInput="handleVoiceInput"
+                    />
+                  </div>
                 </div>
+
               </div>
 
               <!-- 快捷选项 -->
@@ -473,10 +453,9 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useTravelStore } from "@/stores/travel";
 import { useUserStore } from '@/stores/user'
 import MapComponent from "@/components/MapComponent.vue";
+import VoiceInput from "@/components/VoiceInput.vue";
 import draggable from 'vuedraggable';
 import {
-  Microphone,
-  VideoPause,
   MagicStick,
   Refresh,
   Loading,
@@ -490,7 +469,6 @@ import {
   InfoFilled,
 } from "@element-plus/icons-vue";
 import { generateTravelPlan } from "@/services/llm";
-import speechRecognition from "@/services/speech";
 
 // 状态管理
 const travelStore = useTravelStore();
@@ -499,8 +477,6 @@ const authStore = useUserStore();
 // 响应式数据
 const activeTab = ref("generate");
 const inputText = ref("");
-const voiceText = ref("");
-const isRecording = ref(false);
 const isPlanning = ref(false);
 const mapRef = ref(null);
 const mapCenter = ref([116.397428, 39.90923]);
@@ -630,105 +606,16 @@ const mapMarkers = computed(() => {
   return markers;
 });
 
-// 语音识别相关
-let recognition = null;
-
-const initSpeechRecognition = () => {
-  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-
-    recognition.lang = "zh-CN";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      isRecording.value = true;
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      inputText.value = transcript;
-      voiceText.value = transcript;
-      ElMessage.success("语音识别成功");
-    };
-
-    recognition.onerror = (event) => {
-      console.error("语音识别错误:", event.error);
-      ElMessage.error("语音识别失败，请重试");
-      isRecording.value = false;
-    };
-
-    recognition.onend = () => {
-      isRecording.value = false;
-    };
-  } else {
-    ElMessage.warning("您的浏览器不支持语音识别功能");
-  }
-};
-
-// 切换录音状态
-const toggleRecording = async () => {
-  if (!recognition) {
-    // 尝试使用新的语音识别服务
-    if (speechRecognition.isRecognitionSupported()) {
-      await startAdvancedListening();
+// 处理语音输入
+const handleVoiceInput = (voiceText) => {
+  if (voiceText) {
+    // 如果当前输入框有内容，在末尾添加语音输入
+    if (inputText.value.trim()) {
+      inputText.value += ' ' + voiceText;
     } else {
-      ElMessage.error("语音识别未初始化");
+      inputText.value = voiceText;
     }
-    return;
-  }
-
-  if (isRecording.value) {
-    recognition.stop();
-  } else {
-    recognition.start();
-  }
-};
-
-// 高级语音识别
-const startAdvancedListening = async () => {
-  try {
-    const hasPermission = await speechRecognition.requestMicrophonePermission();
-    if (!hasPermission) {
-      ElMessage.error("需要麦克风权限才能使用语音输入");
-      return;
-    }
-
-    isRecording.value = true;
-    voiceText.value = "正在监听，请说话...";
-
-    await speechRecognition.startListening({
-      onResult: (result) => {
-        if (result.interim) {
-          voiceText.value = `正在识别: ${result.interim}`;
-        }
-        if (result.final) {
-          voiceText.value = result.final;
-          inputText.value = result.final;
-          isRecording.value = false;
-          ElMessage.success("语音识别完成");
-        }
-      },
-      onError: (error) => {
-        console.error("语音识别错误:", error);
-        ElMessage.error(error);
-        isRecording.value = false;
-        voiceText.value = "";
-      },
-      onEnd: () => {
-        isRecording.value = false;
-        if (!voiceText.value || voiceText.value.includes("正在")) {
-          voiceText.value = "";
-        }
-      },
-    });
-  } catch (error) {
-    console.error("启动语音识别失败:", error);
-    ElMessage.error("启动语音识别失败");
-    isRecording.value = false;
-    voiceText.value = "";
+    ElMessage.success('语音输入已添加到文本框');
   }
 };
 
@@ -1360,11 +1247,6 @@ const onMapReady = (map) => {
 
 // 生命周期
 onMounted(async () => {
-  initSpeechRecognition();
-  if (speechRecognition.isRecognitionSupported()) {
-    console.log("语音识别已准备就绪");
-  }
-
   // 如果用户已登录，加载历史记录
   if (authStore.user) {
     await loadSavedHistory();
@@ -1385,14 +1267,9 @@ watch(
 );
 
 onUnmounted(() => {
-  // 清理语音识别
-  if (isRecording.value) {
-    if (recognition) {
-      recognition.stop();
-    }
-    if (speechRecognition.isRecognitionSupported()) {
-      speechRecognition.stopListening();
-    }
+  // 清理地图资源
+  if (mapRef.value) {
+    mapRef.value = null;
   }
 });
 </script>
@@ -1443,21 +1320,20 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
-.voice-btn {
-  width: 60px;
-  height: 60px;
-  font-size: 24px;
-  margin-bottom: 10px;
-}
-
-.voice-tip {
-  color: #909399;
-  font-size: 12px;
-  margin: 0;
-}
-
 .text-input {
   margin-bottom: 20px;
+}
+
+.input-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.voice-input-container {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .input-textarea {

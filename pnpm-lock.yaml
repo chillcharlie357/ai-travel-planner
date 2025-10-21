@@ -14,6 +14,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.75.0
         version: 2.75.1
+      annyang:
+        specifier: ^2.6.1
+        version: 2.6.1
       axios:
         specifier: ^1.12.2
         version: 1.12.2
@@ -644,6 +647,9 @@ packages:
     resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
     engines: {node: '>=0.4.0'}
     hasBin: true
+
+  annyang@2.6.1:
+    resolution: {integrity: sha512-KfO6FVFmE7H7epXgAWRoGITShVqsDs6zLKuTxDiJHZmAVnpKeUAKiMUIr7hDXbNUOqRIB3RVTQQd/Yaf4ULauw==}
 
   ansis@4.2.0:
     resolution: {integrity: sha512-HqZ5rWlFjGiV0tDm3UxxgNRqsOTniqoKZu0pIAfh7TZQMGuZK+hH0drySty0si0QXj1ieop4+SkSfPZBPPkHig==}
@@ -1902,6 +1908,8 @@ snapshots:
       - vue
 
   acorn@8.15.0: {}
+
+  annyang@2.6.1: {}
 
   ansis@4.2.0: {}
 
