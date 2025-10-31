@@ -71,6 +71,17 @@
                       {{ pref }}
                     </el-tag>
                   </div>
+                  <div class="option-group">
+                    <span class="group-label">预算：</span>
+                    <el-tag
+                      v-for="budget in budgets"
+                      :key="budget"
+                      @click="addToInput(budget)"
+                      class="option-tag budget-tag"
+                    >
+                      {{ budget }}
+                    </el-tag>
+                  </div>
                 </div>
               </div>
 
@@ -144,8 +155,7 @@
                       {{ plan.destination }}
                     </div>
                     <div class="history-info">
-                      {{ plan.days }}天 ·
-                      {{ plan.people }}人
+                      {{ plan.days }}天
                     </div>
                     <div class="history-date">
                       {{ formatDate(plan.created_at) }}
@@ -218,6 +228,22 @@
           <el-card class="detail-card">
             <template #header>
               <div class="card-header">
+                <!-- 预算概览 -->
+                <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="budget-overview">
+                  <div class="budget-info">
+                    <div class="budget-item">
+                      <el-icon class="budget-icon"><Money /></el-icon>
+                      <span class="budget-label">总预算:</span>
+                      <span class="budget-value">¥{{ formatBudget(currentPlan.budget || currentPlan.totalCost) }}</span>
+                    </div>
+                    <div class="budget-item">
+                      <el-icon class="budget-icon"><Calendar /></el-icon>
+                      <span class="budget-label">日均:</span>
+                      <span class="budget-value">¥{{ formatBudget((currentPlan.budget || currentPlan.totalCost) / (currentPlan.days || 1)) }}</span>
+                    </div>
+                  </div>
+                </div>
+                
                 <div class="header-actions">
                   <el-tag v-if="isStreaming" type="info" effect="plain">
                     <el-icon class="is-loading"><Loading /></el-icon>
@@ -303,7 +329,16 @@
                   class="day-item"
                 >
                   <div class="day-header" @click="toggleDay(index)">
-                    <h4>第{{ index + 1 }}天</h4>
+                    <div class="day-title-section">
+                      <h4>第{{ index + 1 }}天</h4>
+                      <!-- 每日预算信息 -->
+                      <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="day-budget">
+                        <el-icon class="budget-icon-small"><Money /></el-icon>
+                        <span class="daily-budget-text">
+                          预算: ¥{{ formatBudget(getDailyBudget(index)) }}
+                        </span>
+                      </div>
+                    </div>
                     <div class="day-summary">
                       <span v-if="day.activities" class="activity-count">
                         {{ day.activities.length }}个活动
@@ -318,6 +353,14 @@
                     <div v-show="isExpanded || expandedDays.includes(index)" class="day-content">
                       <!-- 简洁视图 -->
                       <div v-if="displayMode === 'compact'" class="activities-compact">
+                        <!-- 当日预算总览 -->
+                        <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="day-budget-summary">
+                          <div class="budget-summary-item">
+                            <el-icon class="budget-icon-compact"><Money /></el-icon>
+                            <span class="budget-text">当日预算: ¥{{ formatBudget(getDailyBudget(index)) }}</span>
+                          </div>
+                        </div>
+                        
                         <draggable
                           v-model="day.activities"
                           group="activities"
@@ -344,6 +387,36 @@
 
                       <!-- 详细视图 -->
                       <div v-else class="activities-detailed">
+                        <!-- 当日预算详细信息 -->
+                        <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="day-budget-detailed">
+                          <h6 class="budget-section-title">
+                            <el-icon><Money /></el-icon>
+                            当日预算分配
+                          </h6>
+                          <div class="budget-breakdown">
+                            <div class="budget-item">
+                              <span class="budget-category">活动门票</span>
+                              <span class="budget-amount">¥{{ formatBudget(getDailyBudget(index) * 0.4) }}</span>
+                            </div>
+                            <div class="budget-item">
+                              <span class="budget-category">餐饮费用</span>
+                              <span class="budget-amount">¥{{ formatBudget(getDailyBudget(index) * 0.35) }}</span>
+                            </div>
+                            <div class="budget-item">
+                              <span class="budget-category">交通费用</span>
+                              <span class="budget-amount">¥{{ formatBudget(getDailyBudget(index) * 0.15) }}</span>
+                            </div>
+                            <div class="budget-item">
+                              <span class="budget-category">其他费用</span>
+                              <span class="budget-amount">¥{{ formatBudget(getDailyBudget(index) * 0.1) }}</span>
+                            </div>
+                            <div class="budget-item budget-total">
+                              <span class="budget-category">当日总计</span>
+                              <span class="budget-amount">¥{{ formatBudget(getDailyBudget(index)) }}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
                         <draggable
                           v-model="day.activities"
                           group="activities"
@@ -371,6 +444,11 @@
                                         <el-icon><Clock /></el-icon>
                                         {{ activity.duration }}
                                       </span>
+                                      <!-- 活动预算信息 -->
+                                      <span v-if="activity.cost || getEstimatedActivityCost(activity)" class="activity-cost">
+                                        <el-icon><Money /></el-icon>
+                                        ¥{{ activity.cost || getEstimatedActivityCost(activity) }}
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -397,8 +475,14 @@
                               :key="mealIndex"
                               class="meal-item"
                             >
-                              <el-tag size="small" type="success">{{ meal.type }}</el-tag>
-                              <span class="meal-restaurant">{{ meal.restaurant }}</span>
+                              <div class="meal-info">
+                                <el-tag size="small" type="success">{{ meal.type }}</el-tag>
+                                <span class="meal-restaurant">{{ meal.restaurant }}</span>
+                              </div>
+                              <div v-if="meal.cost || getEstimatedMealCost(meal)" class="meal-cost">
+                                <el-icon><Money /></el-icon>
+                                <span>¥{{ meal.cost || getEstimatedMealCost(meal) }}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -407,8 +491,14 @@
                         <div v-if="day.accommodation" class="day-accommodation">
                           <h6>住宿安排</h6>
                           <div class="accommodation-info">
-                            <span class="hotel-name">{{ day.accommodation.name }}</span>
-                            <el-tag size="small" type="info">{{ day.accommodation.type }}</el-tag>
+                            <div class="accommodation-details">
+                              <span class="hotel-name">{{ day.accommodation.name }}</span>
+                              <el-tag size="small" type="info">{{ day.accommodation.type }}</el-tag>
+                            </div>
+                            <div v-if="day.accommodation.cost || getEstimatedAccommodationCost(day.accommodation)" class="accommodation-cost">
+                              <el-icon><Money /></el-icon>
+                              <span>¥{{ day.accommodation.cost || getEstimatedAccommodationCost(day.accommodation) }}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -467,6 +557,8 @@ import {
   Money,
   Location,
   InfoFilled,
+  User,
+  Calendar,
 } from "@element-plus/icons-vue";
 import { generateTravelPlan } from "@/services/llm";
 
@@ -512,6 +604,7 @@ const destinations = [
   "德国",
 ];
 const days = ["3天", "5天", "7天", "10天", "15天"];
+const budgets = ["预算1000元", "预算3000元", "预算5000元", "预算8000元", "预算10000元", "预算15000元"];
 const preferences = [
   "美食",
   "购物",
@@ -659,7 +752,7 @@ const generatePlan = async () => {
 
     travelStore.setPlan(tempPlan);
 
-    // 直接传递用户的原始输入
+    // 直接传递用户的原始输入给模型，让模型自行解析
     const planParams = {
       rawInput: inputText.value.trim()
     };
@@ -746,80 +839,6 @@ const generatePlan = async () => {
     streamingContent.value = "";
     travelStore.setPlanning(false);
   }
-};
-
-// 解析输入内容
-const parsePlanInput = (input) => {
-  const trimmed = input.trim();
-  return {
-    destination: "", // 不在前端识别，交由 LLM 从原文提取
-    days: extractDays(trimmed),
-    people: extractTravelers(trimmed), // 与 llm.js 的提示词对齐
-    travelers: extractTravelers(trimmed), // 保留兼容字段
-    preferences: extractPreferences(trimmed),
-    startDate: new Date().toISOString().split("T")[0],
-    rawInput: trimmed,
-  };
-};
-
-const extractDestination = (input) => {
-  const text = input.replace(/\s+/g, " ").trim();
-
-  // 1) 基于语义关键词提取：只在“去/到/前往/目的地”等后面抓取
-  const keywordPatterns = [
-    /(?:目的地|去|到|前往|飞往|打算去|计划去|想到)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})(?=[,，。.!]|$)/,
-    /(?:去往|前去)\s*([A-Za-z\u4e00-\u9fa5·\-]{1,30})/,
-    /([A-Za-z\u4e00-\u9fa5·\-]{1,30})\s*(?:之旅|之行|行程)(?=[,，。.!]|$)/,
-  ];
-  for (const re of keywordPatterns) {
-    const m = text.match(re);
-    if (m && m[1]) {
-      const candidate = m[1].trim();
-      // 避免将“日本料理/美食/动漫”等偏好误识别为目的地
-      if (
-        !/(料理|美食|动漫|文化|历史|温泉|海滩|购物|自然|亲子)$/.test(candidate)
-      ) {
-        return candidate;
-      }
-    }
-  }
-
-  // 2) 英文或拼音目的地：句末或逗号/句号前的独立词
-  const freePattern = /\b([A-Za-z][A-Za-z\s\-]{1,30})\b(?=[,，。.!]|$)/;
-  const freeMatch = text.match(freePattern);
-  if (freeMatch && freeMatch[1]) {
-    return freeMatch[1].trim();
-  }
-
-  return "目的地未识别";
-};
-
-const extractDays = (input) => {
-  const dayMatch = input.match(/(\d+)\s*天/);
-  return dayMatch ? parseInt(dayMatch[1]) : 5;
-};
-
-
-
-const extractTravelers = (input) => {
-  const travelerMatch = input.match(/(\d+)\s*人/);
-  return travelerMatch ? parseInt(travelerMatch[1]) : 2;
-};
-
-const extractPreferences = (input) => {
-  const preferences = [
-    "美食",
-    "购物",
-    "文化",
-    "自然",
-    "历史",
-    "娱乐",
-    "动漫",
-    "温泉",
-    "海滩",
-  ];
-  const found = preferences.filter((pref) => input.includes(pref));
-  return found.join("、") || "美食、文化";
 };
 
 // 备用计划生成
@@ -1076,6 +1095,95 @@ const deletePlan = async () => {
       ElMessage.error("删除失败，请重试");
     }
   }
+};
+
+// 格式化预算显示
+const formatBudget = (budget) => {
+  if (!budget) return '0';
+  const num = parseFloat(budget);
+  if (isNaN(num)) return '0';
+  
+  // 如果是整数，不显示小数点
+  if (num % 1 === 0) {
+    return num.toLocaleString('zh-CN');
+  }
+  
+  // 如果有小数，保留两位小数
+  return num.toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+};
+
+// 计算每日预算
+const getDailyBudget = (dayIndex) => {
+  if (!currentPlan.value || (!currentPlan.value.budget && !currentPlan.value.totalCost)) {
+    return 0;
+  }
+  
+  const totalBudget = currentPlan.value.budget || currentPlan.value.totalCost;
+  const totalDays = currentPlan.value.days || currentPlan.value.itinerary?.length || 1;
+  
+  return totalBudget / totalDays;
+};
+
+// 估算活动费用
+const getEstimatedActivityCost = (activity) => {
+  if (!activity || !activity.type) return 0;
+  
+  const costMap = {
+    '景点': 80,
+    '博物馆': 60,
+    '公园': 20,
+    '寺庙': 30,
+    '购物': 200,
+    '娱乐': 150,
+    '体验': 120,
+    '观光': 100,
+    '文化': 70,
+    '历史': 50,
+    '自然': 40,
+    '艺术': 90,
+    '运动': 100,
+    '休闲': 60
+  };
+  
+  return costMap[activity.type] || 80;
+};
+
+// 估算餐饮费用
+const getEstimatedMealCost = (meal) => {
+  if (!meal || !meal.type) return 0;
+  
+  const costMap = {
+    '早餐': 30,
+    '午餐': 80,
+    '晚餐': 120,
+    '下午茶': 50,
+    '夜宵': 60,
+    '小食': 25,
+    '饮品': 20
+  };
+  
+  return costMap[meal.type] || 60;
+};
+
+// 估算住宿费用
+const getEstimatedAccommodationCost = (accommodation) => {
+  if (!accommodation || !accommodation.type) return 0;
+  
+  const costMap = {
+    '酒店': 400,
+    '民宿': 250,
+    '青旅': 100,
+    '度假村': 800,
+    '客栈': 180,
+    '公寓': 300,
+    '别墅': 1000,
+    '帐篷': 80
+  };
+  
+  return costMap[accommodation.type] || 300;
 };
 
 // 删除历史记录中的计划
@@ -1377,6 +1485,19 @@ onUnmounted(() => {
 .option-tag:hover {
   background: #409eff;
   color: white;
+}
+
+.budget-tag {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  color: white;
+  border: none;
+}
+
+.budget-tag:hover {
+  background: linear-gradient(135deg, #5daf34 0%, #7bc143 100%);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
 }
 
 .generate-btn {
@@ -1869,6 +1990,116 @@ onUnmounted(() => {
   margin-left: 8px;
 }
 
+/* 预算概览样式 */
+.budget-overview {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.budget-info {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.budget-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.budget-icon {
+  color: #409eff;
+  font-size: 16px;
+}
+
+.budget-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.budget-value {
+  color: #333;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 每日预算样式 */
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.day-header:hover {
+  background: #e9ecef;
+}
+
+.day-title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.day-title-section h4 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.day-budget {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.budget-icon-small {
+  color: #67c23a;
+  font-size: 14px;
+}
+
+.daily-budget-text {
+  color: #67c23a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-count {
+  color: #666;
+  font-size: 14px;
+}
+
+.expand-icon {
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -2216,6 +2447,197 @@ onUnmounted(() => {
     position: static;
     width: 100%;
     margin-top: 20px;
+  }
+}
+
+/* 预算显示样式 */
+/* 简洁视图预算样式 */
+.day-budget-summary {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.2);
+}
+
+.budget-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-icon-compact {
+  color: white;
+  font-size: 16px;
+}
+
+.budget-text {
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* 详细视图预算样式 */
+.day-budget-detailed {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.budget-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.budget-section-title .el-icon {
+  color: #67c23a;
+  font-size: 18px;
+}
+
+.budget-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.budget-item.budget-total {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  color: white;
+  font-weight: 600;
+  border: none;
+  margin-top: 4px;
+}
+
+.budget-category {
+  font-size: 14px;
+  color: #666;
+}
+
+.budget-item.budget-total .budget-category {
+  color: white;
+}
+
+.budget-amount {
+  font-size: 14px;
+  font-weight: 600;
+  color: #67c23a;
+}
+
+.budget-item.budget-total .budget-amount {
+  color: white;
+}
+
+/* 活动预算样式 */
+.activity-cost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #67c23a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.activity-cost .el-icon {
+  font-size: 12px;
+}
+
+/* 餐饮预算样式 */
+.meal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.meal-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meal-cost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #67c23a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.meal-cost .el-icon {
+  font-size: 13px;
+}
+
+/* 住宿预算样式 */
+.accommodation-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.accommodation-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accommodation-cost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #67c23a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.accommodation-cost .el-icon {
+  font-size: 14px;
+}
+
+/* 预算样式响应式设计 */
+@media (max-width: 768px) {
+  .budget-breakdown {
+    gap: 6px;
+  }
+  
+  .budget-item {
+    padding: 6px 10px;
+  }
+  
+  .budget-category,
+  .budget-amount {
+    font-size: 13px;
+  }
+  
+  .day-budget-summary {
+    padding: 10px 12px;
+  }
+  
+  .budget-text {
+    font-size: 13px;
   }
 }
 </style>
