@@ -73,14 +73,38 @@
                   </div>
                   <div class="option-group">
                     <span class="group-label">预算：</span>
-                    <el-tag
-                      v-for="budget in budgets"
-                      :key="budget"
-                      @click="addToInput(budget)"
-                      class="option-tag budget-tag"
-                    >
-                      {{ budget }}
-                    </el-tag>
+                    <div class="budget-input-container">
+                      <el-input-number
+                        v-model="budgetAmount"
+                        :min="100"
+                        :max="100000"
+                        :step="100"
+                        placeholder="输入预算"
+                        class="budget-input"
+                        controls-position="right"
+                      />
+                      <span class="budget-unit">元</span>
+                      <el-button
+                        size="small"
+                        type="primary"
+                        @click="addBudgetToInput"
+                        :disabled="!budgetAmount"
+                        class="add-budget-btn"
+                      >
+                        添加
+                      </el-button>
+                    </div>
+                    <div class="budget-quick-options">
+                      <el-tag
+                        v-for="budget in budgets"
+                        :key="budget"
+                        @click="addToInput(budget)"
+                        class="option-tag budget-tag"
+                        size="small"
+                      >
+                        {{ budget }}
+                      </el-tag>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -300,20 +324,6 @@
               >
                 <!-- 展示控制按钮 -->
                 <div class="display-controls">
-                  <el-button-group size="small">
-                    <el-button 
-                      :type="displayMode === 'compact' ? 'primary' : ''"
-                      @click="displayMode = 'compact'"
-                    >
-                      简洁视图
-                    </el-button>
-                    <el-button 
-                      :type="displayMode === 'detailed' ? 'primary' : ''"
-                      @click="displayMode = 'detailed'"
-                    >
-                      详细视图
-                    </el-button>
-                  </el-button-group>
                   <el-button 
                     size="small" 
                     :icon="isExpanded ? 'ArrowUp' : 'ArrowDown'"
@@ -351,42 +361,8 @@
 
                   <el-collapse-transition>
                     <div v-show="isExpanded || expandedDays.includes(index)" class="day-content">
-                      <!-- 简洁视图 -->
-                      <div v-if="displayMode === 'compact'" class="activities-compact">
-                        <!-- 当日预算总览 -->
-                        <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="day-budget-summary">
-                          <div class="budget-summary-item">
-                            <el-icon class="budget-icon-compact"><Money /></el-icon>
-                            <span class="budget-text">当日预算: ¥{{ formatBudget(getDailyBudget(index)) }}</span>
-                          </div>
-                        </div>
-                        
-                        <draggable
-                          v-model="day.activities"
-                          group="activities"
-                          item-key="name"
-                          class="draggable-list"
-                          @change="onActivityDragChange"
-                        >
-                          <template #item="{ element: activity, index: actIndex }">
-                            <div
-                              class="activity-item-compact draggable-item"
-                              :key="actIndex"
-                              @click="onActivityClick(activity)"
-                            >
-                              <div class="drag-handle">⋮⋮</div>
-                              <div class="activity-time">{{ activity.time }}</div>
-                              <div class="activity-info">
-                                <span class="activity-name">{{ activity.name }}</span>
-                                <el-tag size="small" class="activity-type">{{ activity.type }}</el-tag>
-                              </div>
-                            </div>
-                          </template>
-                        </draggable>
-                      </div>
-
                       <!-- 详细视图 -->
-                      <div v-else class="activities-detailed">
+                      <div class="activities-detailed">
                         <!-- 当日预算详细信息 -->
                         <div v-if="currentPlan && (currentPlan.budget || currentPlan.totalCost)" class="day-budget-detailed">
                           <h6 class="budget-section-title">
@@ -572,9 +548,9 @@ const inputText = ref("");
 const isPlanning = ref(false);
 const mapRef = ref(null);
 const mapCenter = ref([116.397428, 39.90923]);
+const budgetAmount = ref(null); // 预算金额输入
 
 // 计划展示相关状态
-const displayMode = ref('compact'); // 'compact' | 'detailed'
 const isExpanded = ref(false); // 是否展开全部
 const expandedDays = ref([]); // 展开的天数索引数组
 
@@ -718,6 +694,15 @@ const addToInput = (text) => {
     inputText.value += "，" + text;
   } else {
     inputText.value = text;
+  }
+};
+
+// 添加预算到输入框
+const addBudgetToInput = () => {
+  if (budgetAmount.value) {
+    const budgetText = `预算${budgetAmount.value}元`;
+    addToInput(budgetText);
+    budgetAmount.value = null; // 清空输入框
   }
 };
 
@@ -1500,6 +1485,33 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
 }
 
+.budget-input-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.budget-input {
+  width: 120px;
+}
+
+.budget-unit {
+  color: #606266;
+  font-size: 14px;
+}
+
+.add-budget-btn {
+  height: 32px;
+}
+
+.budget-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .generate-btn {
   width: 100%;
   height: 50px;
@@ -1785,22 +1797,7 @@ onUnmounted(() => {
   padding: 0 12px 20px;
 }
 
-/* 简洁视图样式 */
-.activities-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-.activity-item-compact {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: white;
-  border-radius: 6px;
-  border-left: 3px solid #409eff;
-}
 
 .activity-time {
   font-weight: 600;
@@ -2161,11 +2158,7 @@ onUnmounted(() => {
     gap: 8px;
   }
 
-  .activity-item-compact {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
+
 
   .activity-time {
     min-width: auto;
@@ -2451,31 +2444,7 @@ onUnmounted(() => {
 }
 
 /* 预算显示样式 */
-/* 简洁视图预算样式 */
-.day-budget-summary {
-  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.2);
-}
 
-.budget-summary-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.budget-icon-compact {
-  color: white;
-  font-size: 16px;
-}
-
-.budget-text {
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
-}
 
 /* 详细视图预算样式 */
 .day-budget-detailed {
